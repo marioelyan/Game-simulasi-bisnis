@@ -1,14 +1,49 @@
 // Simulasi Bisnis — Tahap 1: irisan vertikal.
-// Satu toko, satu produk (dimsum), loop beli -> produksi -> jual.
-// Mesin deterministik: RNG ber-seed, input sama menghasilkan output sama.
-// Angka-angka di bawah masih sementara dan bisa di-tuning (bukan keputusan final).
+// Alur awal (perubahan desain 30 Okt dini hari): pemain mulai dengan modal,
+// MELIHAT PELUANG dulu, lalu MEMILIH usaha dari set awal yang dibatasi.
+// Baru setelah usaha dibuka, loop beli -> produksi -> jual berjalan.
+// Produk adalah DATA (bukan kode): nambah produk tidak mengubah mesin.
+// Angka-angka masih sementara dan bisa di-tuning (bukan keputusan final).
 
-var HARGA_AYAM = 8000;    // Rp per unit daging ayam
-var HARGA_KULIT = 3000;   // Rp per unit kulit pangsit
-var HARGA_ACUAN = 15000;  // harga jual acuan untuk rumus permintaan
-var PERMINTAAN_DASAR = 20; // pembeli potensial per hari pada harga acuan
-var MODAL_AWAL = 500000;  // Rp, sesuai usulan awal (masih bisa diubah)
+var MODAL_AWAL = 500000;  // Rp, sesuai usulan awal
 var SAVE_KEY = 'simulasi-bisnis-save-v1';
+
+// Set awal yang dibatasi (MVP). Harga mendekati dunia nyata (sementara).
+var PRODUCTS = {
+  dimsum: {
+    nama: 'Dimsum',
+    bahan: [
+      { id: 'ayam', nama: 'Daging Ayam', harga: 8000 },
+      { id: 'kulit', nama: 'Kulit Pangsit', harga: 3000 }
+    ],
+    hargaAcuan: 15000,
+    permintaanDasar: 20
+  },
+  kopi: {
+    nama: 'Kopi Susu',
+    bahan: [
+      { id: 'kopi', nama: 'Biji Kopi', harga: 5000 },
+      { id: 'susu', nama: 'Gula & Susu', harga: 2000 }
+    ],
+    hargaAcuan: 12000,
+    permintaanDasar: 22
+  },
+  roti: {
+    nama: 'Roti Sobek',
+    bahan: [
+      { id: 'tepung', nama: 'Tepung', harga: 4000 },
+      { id: 'mentega', nama: 'Mentega', harga: 3000 }
+    ],
+    hargaAcuan: 10000,
+    permintaanDasar: 16
+  }
+};
+
+function sinyalPermintaan(permintaanDasar) {
+  if (permintaanDasar >= 20) return 'Tinggi';
+  if (permintaanDasar >= 15) return 'Sedang';
+  return 'Rendah';
+}
 
 function mulberry32(a) {
   return function () {
@@ -44,13 +79,19 @@ function createState(seed) {
     hari: 1,
     tanggal: todayISO(),
     seed: seed || Math.floor(Math.random() * 1000000000),
-    bahan: { ayam: 0, kulit: 0 },
-    stok: { dimsum: 0 },
-    harga: HARGA_ACUAN,
+    tokoBuka: false,
+    produkId: null,
+    bahan: {},
+    stok: 0,
+    harga: 0,
     terjualHariIni: 0,
     penjualanHariIni: 0,
-    log: [{ hari: 1, teks: 'Usaha dibuka dengan modal ' + fmtRp(MODAL_AWAL) + '. Beli bahan, produksi, atur harga, lalu jalan ke hari berikutnya.' }]
+    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Lihat peluang, lalu pilih usaha yang mau dibuka.' }]
   };
+}
+
+function produkAktif(state) {
+  return state.produkId ? PRODUCTS[state.produkId] : null;
 }
 
 function pushLog(state, teks) {
@@ -58,41 +99,64 @@ function pushLog(state, teks) {
   if (state.log.length > 50) state.log.length = 50;
 }
 
-function beliBahan(state, jenis, qty) {
-  var harga = jenis === 'ayam' ? HARGA_AYAM : HARGA_KULIT;
-  var biaya = harga * qty;
-  if (state.kas < biaya) return { ok: false, msg: 'Kas tidak cukup untuk beli ' + qty + ' ' + jenis + ' (' + fmtRp(biaya) + ').' };
+function pilihUsaha(state, produkId) {
+  var p = PRODUCTS[produkId];
+  if (!p) return { ok: false, msg: 'Produk tidak dikenal.' };
+  if (state.tokoBuka) return { ok: false, msg: 'Usaha sudah dibuka.' };
+  state.produkId = produkId;
+  state.tokoBuka = true;
+  state.harga = p.hargaAcuan;
+  state.bahan = {};
+  p.bahan.forEach(function (b) { state.bahan[b.id] = 0; });
+  pushLog(state, 'Membuka usaha ' + p.nama + ' dengan modal ' + fmtRp(state.kas) + '.');
+  return { ok: true, msg: 'Membuka usaha ' + p.nama + '.' };
+}
+
+function beliBahan(state, bahanId, qty) {
+  var p = produkAktif(state);
+  if (!p) return { ok: false, msg: 'Buka usaha dulu sebelum beli bahan.' };
+  var bahan = null;
+  p.bahan.forEach(function (b) { if (b.id === bahanId) bahan = b; });
+  if (!bahan) return { ok: false, msg: 'Bahan tidak dikenal.' };
+  var biaya = bahan.harga * qty;
+  if (state.kas < biaya) return { ok: false, msg: 'Kas tidak cukup untuk beli ' + qty + ' ' + bahan.nama + ' (' + fmtRp(biaya) + ').' };
   state.kas -= biaya;
-  state.bahan[jenis] += qty;
-  pushLog(state, 'Beli ' + qty + ' ' + jenis + ' seharga ' + fmtRp(biaya) + '.');
-  return { ok: true, msg: 'Beli ' + qty + ' ' + jenis + '.' };
+  state.bahan[bahanId] += qty;
+  pushLog(state, 'Beli ' + qty + ' ' + bahan.nama + ' seharga ' + fmtRp(biaya) + '.');
+  return { ok: true, msg: 'Beli ' + qty + ' ' + bahan.nama + '.' };
 }
 
 function produksi(state, qty) {
-  if (state.bahan.ayam < qty || state.bahan.kulit < qty) {
-    return { ok: false, msg: 'Bahan tidak cukup untuk produksi ' + qty + ' dimsum (perlu ' + qty + ' ayam dan ' + qty + ' kulit).' };
+  var p = produkAktif(state);
+  if (!p) return { ok: false, msg: 'Buka usaha dulu sebelum produksi.' };
+  for (var i = 0; i < p.bahan.length; i++) {
+    if (state.bahan[p.bahan[i].id] < qty) {
+      return { ok: false, msg: 'Bahan tidak cukup untuk produksi ' + qty + ' ' + p.nama + '.' };
+    }
   }
-  state.bahan.ayam -= qty;
-  state.bahan.kulit -= qty;
-  state.stok.dimsum += qty;
-  pushLog(state, 'Produksi ' + qty + ' dimsum.');
-  return { ok: true, msg: 'Produksi ' + qty + ' dimsum.' };
+  p.bahan.forEach(function (b) { state.bahan[b.id] -= qty; });
+  state.stok += qty;
+  pushLog(state, 'Produksi ' + qty + ' ' + p.nama + '.');
+  return { ok: true, msg: 'Produksi ' + qty + ' ' + p.nama + '.' };
 }
 
 function aturHarga(state, nilai) {
+  if (!produkAktif(state)) return { ok: false, msg: 'Buka usaha dulu.' };
   if (!nilai || nilai < 1000) return { ok: false, msg: 'Harga minimal Rp 1.000.' };
   state.harga = Math.round(nilai);
-  pushLog(state, 'Harga jual diubah menjadi ' + fmtRp(state.harga) + ' per dimsum.');
+  pushLog(state, 'Harga jual diubah menjadi ' + fmtRp(state.harga) + ' per unit.');
   return { ok: true, msg: 'Harga diubah.' };
 }
 
 function hariBerikutnya(state) {
+  var p = produkAktif(state);
+  if (!p) return { ok: false, msg: 'Buka usaha dulu.' };
   var rng = mulberry32(state.seed + state.hari * 7919);
-  var permintaan = Math.round(PERMINTAAN_DASAR * (HARGA_ACUAN / state.harga) * (0.8 + rng() * 0.4));
+  var permintaan = Math.round(p.permintaanDasar * (p.hargaAcuan / state.harga) * (0.8 + rng() * 0.4));
   if (permintaan < 0) permintaan = 0;
-  var terjual = Math.min(permintaan, state.stok.dimsum);
+  var terjual = Math.min(permintaan, state.stok);
   var pendapatan = terjual * state.harga;
-  state.stok.dimsum -= terjual;
+  state.stok -= terjual;
   state.kas += pendapatan;
   state.terjualHariIni = terjual;
   state.penjualanHariIni = pendapatan;
@@ -101,7 +165,7 @@ function hariBerikutnya(state) {
   if (terjual < permintaan) {
     pushLog(state, 'Hari ' + (state.hari - 1) + ': permintaan ' + permintaan + ' tapi stok habis setelah ' + terjual + ' terjual. Pendapatan ' + fmtRp(pendapatan) + '.');
   } else {
-    pushLog(state, 'Hari ' + (state.hari - 1) + ': terjual ' + terjual + ' dimsum, pendapatan ' + fmtRp(pendapatan) + '.');
+    pushLog(state, 'Hari ' + (state.hari - 1) + ': terjual ' + terjual + ' ' + p.nama.toLowerCase() + ', pendapatan ' + fmtRp(pendapatan) + '.');
   }
   if (state.kas < 0) pushLog(state, 'PERINGATAN: kas negatif (' + fmtRp(state.kas) + '). Aturan bangkrut lengkap (30 hari) menyusul di tahap berikutnya.');
   return { ok: true, terjual: terjual, pendapatan: pendapatan };
@@ -114,7 +178,13 @@ if (typeof document !== 'undefined') {
   function muat() {
     try {
       var raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { state = JSON.parse(raw); return; }
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.tokoBuka !== 'undefined' && parsed.produkId !== undefined) {
+          state = parsed;
+          return;
+        }
+      }
     } catch (e) { /* abaikan, mulai baru */ }
     state = createState();
   }
@@ -125,24 +195,76 @@ if (typeof document !== 'undefined') {
 
   function el(id) { return document.getElementById(id); }
 
+  function renderPilihan() {
+    var html = '';
+    Object.keys(PRODUCTS).forEach(function (id) {
+      var p = PRODUCTS[id];
+      var bahanTxt = p.bahan.map(function (b) { return b.nama + ' ' + fmtRp(b.harga); }).join(' + ');
+      html += '<div class="produk-card">' +
+        '<div class="produk-nama">' + p.nama + '</div>' +
+        '<div class="produk-info">Bahan: ' + bahanTxt + '</div>' +
+        '<div class="produk-info">Harga acuan: ' + fmtRp(p.hargaAcuan) + '</div>' +
+        '<div class="produk-info">Sinyal permintaan: <strong>' + sinyalPermintaan(p.permintaanDasar) + '</strong></div>' +
+        '<button class="btn btn-primary" data-produk="' + id + '">Buka Usaha Ini</button>' +
+        '</div>';
+    });
+    el('daftar-produk').innerHTML = html;
+    var btns = el('daftar-produk').querySelectorAll('button[data-produk]');
+    btns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var r = pilihUsaha(state, btn.getAttribute('data-produk'));
+        if (!r.ok) alert(r.msg);
+        simpan();
+        render();
+      });
+    });
+  }
+
+  function renderAksiBeli() {
+    var p = produkAktif(state);
+    if (!p) return;
+    var html = '';
+    p.bahan.forEach(function (b) {
+      html += '<button class="btn btn-blue" data-bahan="' + b.id + '">Beli 10 ' + b.nama + ' (' + fmtRp(b.harga * 10) + ')</button>';
+    });
+    el('aksi-beli').innerHTML = html;
+    el('aksi-beli').querySelectorAll('button[data-bahan]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        aksi(function () { return beliBahan(state, btn.getAttribute('data-bahan'), 10); });
+      });
+    });
+    el('btn-produksi').textContent = 'Produksi 10 ' + p.nama;
+  }
+
   function render() {
+    var p = produkAktif(state);
     el('kas').textContent = fmtRp(state.kas);
     el('tanggal').textContent = state.tanggal;
     el('hari').textContent = state.hari;
-    el('penjualan-hari-ini').textContent = fmtRp(state.penjualanHariIni);
-    el('terjual-hari-ini').textContent = state.terjualHariIni + ' dimsum terjual';
-    el('stok-dimsum').textContent = state.stok.dimsum + ' unit';
-    el('bahan-ringkas').textContent = state.bahan.ayam + ' ayam \u00B7 ' + state.bahan.kulit + ' kulit';
-    el('tabel-stok').textContent = state.stok.dimsum;
-    el('tabel-harga').textContent = fmtRp(state.harga);
-    el('tabel-terjual').textContent = state.terjualHariIni;
-    el('harga-jual').value = state.harga;
+    el('layar-pilih').style.display = state.tokoBuka ? 'none' : 'block';
+    el('layar-toko').style.display = state.tokoBuka ? 'block' : 'none';
+    if (!state.tokoBuka) {
+      renderPilihan();
+      el('brand-sub').textContent = 'Pilih usahamu dulu';
+    } else {
+      el('brand-sub').textContent = p.nama + ' \u00B7 Tahap 1: Irisan Vertikal';
+      renderAksiBeli();
+      el('penjualan-hari-ini').textContent = fmtRp(state.penjualanHariIni);
+      el('terjual-hari-ini').textContent = state.terjualHariIni + ' unit terjual';
+      el('stok-produk').textContent = state.stok + ' unit';
+      el('bahan-ringkas').textContent = p.bahan.map(function (b) { return state.bahan[b.id] + ' ' + b.nama.toLowerCase(); }).join(' \u00B7 ');
+      el('tabel-produk').textContent = p.nama;
+      el('tabel-stok').textContent = state.stok;
+      el('tabel-harga').textContent = fmtRp(state.harga);
+      el('tabel-terjual').textContent = state.terjualHariIni;
+      el('harga-jual').value = state.harga;
+    }
     el('log').innerHTML = state.log.map(function (e) {
       return '<li>Hari ' + e.hari + ': ' + e.teks + '</li>';
     }).join('');
   }
 
-  function aksi(fn, okMsg) {
+  function aksi(fn) {
     var r = fn();
     if (!r.ok) alert(r.msg);
     simpan();
@@ -151,8 +273,6 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('DOMContentLoaded', function () {
     muat();
-    el('btn-beli-ayam').addEventListener('click', function () { aksi(function () { return beliBahan(state, 'ayam', 10); }); });
-    el('btn-beli-kulit').addEventListener('click', function () { aksi(function () { return beliBahan(state, 'kulit', 10); }); });
     el('btn-produksi').addEventListener('click', function () { aksi(function () { return produksi(state, 10); }); });
     el('btn-harga').addEventListener('click', function () { aksi(function () { return aturHarga(state, parseInt(el('harga-jual').value, 10)); }); });
     el('btn-hari').addEventListener('click', function () { aksi(function () { return hariBerikutnya(state); }); });
@@ -168,5 +288,5 @@ if (typeof document !== 'undefined') {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { createState: createState, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, hariBerikutnya: hariBerikutnya, fmtRp: fmtRp };
+  module.exports = { createState: createState, pilihUsaha: pilihUsaha, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, hariBerikutnya: hariBerikutnya, PRODUCTS: PRODUCTS, sinyalPermintaan: sinyalPermintaan, fmtRp: fmtRp };
 }

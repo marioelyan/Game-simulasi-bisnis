@@ -46,7 +46,13 @@ th { color: #9fb0cc; text-transform: uppercase; font-size: 12px; letter-spacing:
 .log { list-style: none; padding: 0; margin: 0; font-size: 14px; }
 .log li { padding: 7px 0; border-bottom: 1px solid #2a3d63; }
 .log li:last-child { border-bottom: 0; }
+.produk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+.produk-card { background: #0f1c33; border: 1px solid #2a3d63; border-radius: 8px; padding: 14px; }
+.produk-nama { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+.produk-info { font-size: 13px; color: #9fb0cc; margin-bottom: 4px; }
+.produk-card .btn { margin-top: 10px; }
 @media (max-width: 700px) {
+  .produk-grid { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr; }
   .top-stats { gap: 12px; }
 }
