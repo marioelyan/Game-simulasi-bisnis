@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulasi Bisnis</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-title">SIMULASI BISNIS</div>
+    <div class="brand-sub">Warung Dimsum &middot; Tahap 1: Irisan Vertikal</div>
+  </div>
+  <div class="top-stats">
+    <div class="top-stat"><span class="label">Kas</span><strong id="kas">Rp 500.000</strong></div>
+    <div class="top-stat"><span class="label">Tanggal</span><strong id="tanggal">-</strong></div>
+    <div class="top-stat"><span class="label">Hari ke</span><strong id="hari">1</strong></div>
+  </div>
+  <div class="top-actions">
+    <button id="btn-hari" class="btn btn-primary">Hari Berikutnya &raquo;</button>
+    <button id="btn-baru" class="btn btn-ghost">Usaha Baru</button>
+  </div>
+</header>
+
+<main>
+  <section class="cards">
+    <div class="card">
+      <div class="card-label">Penjualan Hari Ini</div>
+      <div class="card-value" id="penjualan-hari-ini">Rp 0</div>
+      <div class="card-sub" id="terjual-hari-ini">0 dimsum terjual</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Stok Dimsum</div>
+      <div class="card-value" id="stok-dimsum">0 unit</div>
+      <div class="card-sub">Siap jual</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Bahan</div>
+      <div class="card-value" id="bahan-ringkas">0 ayam &middot; 0 kulit</div>
+      <div class="card-sub">Daging ayam &amp; kulit pangsit</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Aksi</h2>
+    <div class="actions">
+      <button id="btn-beli-ayam" class="btn btn-blue">Beli 10 Daging Ayam (Rp 80.000)</button>
+      <button id="btn-beli-kulit" class="btn btn-blue">Beli 10 Kulit Pangsit (Rp 30.000)</button>
+      <button id="btn-produksi" class="btn btn-green">Produksi 10 Dimsum</button>
+      <label class="price-box">
+        Harga jual / dimsum
+        <span class="price-input">
+          <span>Rp</span>
+          <input id="harga-jual" type="number" min="1000" step="500" value="15000">
+          <button id="btn-harga" class="btn btn-purple">Terapkan</button>
+        </span>
+      </label>
+    </div>
+    <p class="hint">Resep: 1 dimsum = 1 daging ayam + 1 kulit pangsit. Pelanggan membeli otomatis tiap hari sesuai harga dan stok.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Daftar Produk &amp; Stok</h2>
+    <table>
+      <thead>
+        <tr><th>Produk</th><th>Stok</th><th>Harga</th><th>Terjual Hari Ini</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Dimsum</td>
+          <td id="tabel-stok">0</td>
+          <td id="tabel-harga">Rp 15.000</td>
+          <td id="tabel-terjual">0</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Catatan Harian</h2>
+    <ul id="log" class="log"></ul>
+  </section>
+
+  <p class="foot">Tahap 1: satu toko, satu produk, loop beli &rarr; produksi &rarr; jual. Angka-angka masih sementara dan bisa di-tuning. Judul game belum diputuskan.</p>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
