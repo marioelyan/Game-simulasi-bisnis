@@ -22,10 +22,20 @@ kecil ~mingguan, besar ~bulanan dengan masa tenggang, tidak pernah
 langsung membangkrutkan; 6 event: viral, kompetitor baru, supplier
 bangkrut, pesanan besar, alat rusak, ulasan viral).
 
-Belum ada (tahap berikutnya): 39 bidang sisanya (Tahap C), holding
-(Tahap D), visual final/audio/distribusi/lisensi (Tahap E). Daftar
-persiapan 40 bidang ada di KONSEP.md (kuliner) dan PERSIAPAN.md
-(bidang 2–40, draf yang disetujui).
+Tahap C: mesin jadi field-driven — 40 bidang bisa dipilih (19 barang,
+21 jasa), riset 3 lapis per bidang dengan hasil tersimpan dan bisa
+dibandingkan, persiapan memakai data bidang itu (tempat, peralatan,
+izin, produk/jasa, peran karyawan). Bidang jasa menjual kapasitas
+harian yang hangus di akhir hari. Data bidang di `bidang.js`
+(dari PERSIAPAN.md + angka tuning sementara).
+
+Catatan Tahap C: lokasi masih tier generik (per-bidang menyusul
+sebagai pendalaman data); beberapa bidang dimodelkan sederhana
+(mis. keuangan mikro, kos, kendaraan bekas — kelayakannya terlihat
+dari riset, bukan dari gembok, sesuai konsep).
+
+Belum ada (tahap berikutnya): holding (Tahap D), visual
+final/audio/distribusi/lisensi (Tahap E).
 
 ## Cara main
 

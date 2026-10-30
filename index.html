@@ -23,19 +23,13 @@
 
 <main>
   <section id="layar-riset" class="card">
-    <h2>1. Riset Pasar — Kuliner</h2>
-    <p>Riset dulu sebelum buka usaha. Tanpa jawaban mentah: yang kamu dapat perkiraan, rentang, dan sinyal.</p>
+    <h2>1. Riset Pasar — Pilih Bidang</h2>
+    <p>40 bidang terbuka. Riset dulu sebelum buka usaha: tanpa jawaban mentah, yang kamu dapat perkiraan, rentang, dan sinyal — tersimpan per bidang dan bisa dibandingkan.</p>
     <div id="riset-info"></div>
-    <div class="row">
-      <button class="btn" id="btn-riset1">Gambaran Kasar (gratis)</button>
-      <button class="btn" id="btn-riset2">Laporan Detail (Rp50.000, 2 hari)</button>
-      <button class="btn" id="btn-riset3">Uji Pasar (modal Rp100.000, 3 hari)</button>
-      <button class="btn btn-primary" id="btn-ke-persiapan">Lanjut ke Persiapan →</button>
-    </div>
   </section>
 
   <section id="layar-persiapan" class="card">
-    <h2>2. Persiapan Buka Usaha — Kuliner</h2>
+    <h2 id="persiapan-judul">2. Persiapan Buka Usaha</h2>
     <p>Urus satu per satu. Tiap item makan uang dan waktu. Ada prasyarat: tempat dulu baru peralatan, menu dulu baru supplier, supplier dulu baru stok awal.</p>
     <h3>Tempat (wajib)</h3>
     <div id="opsi-tempat" class="row"></div>
@@ -44,8 +38,8 @@
     <h3>Peralatan (wajib)</h3>
     <div id="opsi-peralatan" class="row"></div>
     <h3>Izin (wajib)</h3>
-    <div class="row"><button class="btn" id="btn-izin">Urus NIB + Sertifikat (Rp150.000, 3 hari)</button></div>
-    <h3>Menu Awal (wajib, pilih minimal 1)</h3>
+    <div class="row"><button class="btn" id="btn-izin">Urus Izin</button></div>
+    <h3 id="menu-judul">Menu Awal (wajib, pilih minimal 1)</h3>
     <div id="opsi-menu" class="row"></div>
     <h3>Supplier Awal (wajib, 1 per input)</h3>
     <div id="supplier-area"></div>
@@ -53,13 +47,13 @@
     <div class="row"><button class="btn" id="btn-stok-awal">Siapkan Stok Awal (5 unit per input)</button></div>
     <h3>Opsional</h3>
     <div id="opsi-opsional" class="row"></div>
-    <p class="muted">SDM awal (karyawan) menyusul di Tahap B.</p>
+    <p class="muted">Karyawan direkrut setelah usaha buka (menu Rekrutmen di layar toko).</p>
     <p id="persiapan-status"></p>
     <div class="row"><button class="btn btn-primary" id="btn-buka">Buka Usaha</button></div>
   </section>
 
   <section id="layar-toko" class="card">
-    <h2>3. Usaha Berjalan — Kuliner</h2>
+    <h2 id="toko-judul">3. Usaha Berjalan</h2>
     <p id="toko-info"></p>
     <p id="stok-info"></p>
     <p id="bahan-info"></p>
@@ -118,6 +112,7 @@
   </section>
 </main>
 
+<script src="bidang.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

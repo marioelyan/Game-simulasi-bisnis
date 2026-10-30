@@ -30,14 +30,96 @@ function addDays(iso, n) {
 }
 function monthOf(iso) { return parseInt(iso.slice(5, 7), 10); }
 
-// ---------- DATA: bidang kuliner ----------
-var PRODUK = {
-  dimsum: { nama: 'Dimsum', bahan: [{ id: 'ayam', nama: 'Daging Ayam', harga: 8000 }, { id: 'kulit', nama: 'Kulit Pangsit', harga: 3000 }], hargaAcuan: 15000, permintaanDasar: 20 },
-  kopi: { nama: 'Kopi Susu', bahan: [{ id: 'kopi', nama: 'Biji Kopi', harga: 5000 }, { id: 'gula_susu', nama: 'Gula & Susu', harga: 2000 }], hargaAcuan: 12000, permintaanDasar: 22 },
-  roti: { nama: 'Roti Sobek', bahan: [{ id: 'tepung', nama: 'Tepung', harga: 4000 }, { id: 'mentega', nama: 'Mentega', harga: 3000 }], hargaAcuan: 10000, permintaanDasar: 16 }
+// ---------- DATA: 40 bidang (bidang.js) + bidang aktif ----------
+// bidang.js dimuat sebelum app.js di browser (var BIDANG global);
+// di Node, require langsung.
+var BIDANG_DATA = (typeof BIDANG !== 'undefined') ? BIDANG : require('./bidang.js').BIDANG;
+// Data bidang aktif: diisi muatBidang, DIMUTASI (bukan diganti) supaya
+// referensi yang sudah diekspor/diikat tetap segar saat bidang berganti.
+var PRODUK = {};
+var INPUT_HARGA = {};
+var INPUT_NAMA = {};
+var TEMPAT = {};
+var PERALATAN = {};
+var IZIN = { nama: '', biaya: 0, hari: 0 };
+var OPSIONAL = {};
+var MUSIM = {};
+var PESAING = 0;
+var PERAN = [];
+var JENIS_BIDANG = 'barang';
+var NAMA_BIDANG = '';
+var OPSIONAL_POOL = {
+  promo: { nama: 'Promo Pembukaan', biaya: 100000, hari: 1, efek: 'Reputasi awal +0,10' },
+  platform: { nama: 'Daftar Platform Antar', biaya: 0, hari: 1, efek: 'Permintaan x1,15, pendapatan x0,85 (komisi)' },
+  halal: { nama: 'Sertifikat Halal', biaya: 200000, hari: 7, efek: 'Permintaan x1,10' }
 };
-var INPUT_HARGA = { ayam: 8000, kulit: 3000, kopi: 5000, gula_susu: 2000, tepung: 4000, mentega: 3000 };
-var INPUT_NAMA = { ayam: 'Daging Ayam', kulit: 'Kulit Pangsit', kopi: 'Biji Kopi', gula_susu: 'Gula & Susu', tepung: 'Tepung', mentega: 'Mentega' };
+function isiObj(target, sumber) {
+  Object.keys(target).forEach(function (k) { delete target[k]; });
+  Object.keys(sumber).forEach(function (k) { target[k] = sumber[k]; });
+}
+function normalisasiBidang(raw) {
+  var inputHarga = {}, inputNama = {};
+  Object.keys(raw.produk).forEach(function (pid) {
+    raw.produk[pid].bahan.forEach(function (b) { inputHarga[b.id] = b.harga; inputNama[b.id] = b.nama; });
+  });
+  var opsional = {};
+  (raw.opsional || []).forEach(function (k) { if (OPSIONAL_POOL[k]) opsional[k] = OPSIONAL_POOL[k]; });
+  var musim = {};
+  for (var m = 1; m <= 12; m++) musim[m] = raw.musim ? (raw.musim[m] || 1.0) : 1.0;
+  return { nama: raw.nama, jenis: raw.jenis, tempat: raw.tempat, peralatan: raw.peralatan, izin: raw.izin, produk: raw.produk, inputHarga: inputHarga, inputNama: inputNama, opsional: opsional, musim: musim, pesaing: raw.pesaing, peran: raw.peran };
+}
+function muatBidang(bidangId) {
+  var raw = BIDANG_DATA[bidangId];
+  if (!raw) return false;
+  var d = normalisasiBidang(raw);
+  isiObj(PRODUK, d.produk);
+  isiObj(INPUT_HARGA, d.inputHarga);
+  isiObj(INPUT_NAMA, d.inputNama);
+  isiObj(TEMPAT, d.tempat);
+  isiObj(PERALATAN, d.peralatan);
+  isiObj(OPSIONAL, d.opsional);
+  isiObj(MUSIM, d.musim);
+  IZIN.nama = d.izin.nama; IZIN.biaya = d.izin.biaya; IZIN.hari = d.izin.hari;
+  PESAING = d.pesaing;
+  PERAN = d.peran.slice();
+  JENIS_BIDANG = d.jenis;
+  NAMA_BIDANG = d.nama;
+  return true;
+}
+function sinyalBidang(bidangId) {
+  var raw = BIDANG_DATA[bidangId]; if (!raw) return 'tidak dikenal';
+  var total = 0;
+  Object.keys(raw.produk).forEach(function (pid) { total += raw.produk[pid].permintaanDasar; });
+  return total >= 50 ? 'ramai' : total >= 30 ? 'sedang' : 'sepi';
+}
+function modalKasarBidang(bidangId) {
+  var raw = BIDANG_DATA[bidangId]; if (!raw) return 0;
+  var minTempat = Infinity, minAlat = Infinity;
+  Object.keys(raw.tempat).forEach(function (id) { minTempat = Math.min(minTempat, raw.tempat[id].biaya); });
+  Object.keys(raw.peralatan).forEach(function (id) { minAlat = Math.min(minAlat, raw.peralatan[id].biaya); });
+  var termurahBiaya = Infinity;
+  Object.keys(raw.produk).forEach(function (pid) {
+    var biaya = 0;
+    raw.produk[pid].bahan.forEach(function (b) { biaya += b.harga * 5 * 0.85; });
+    if (biaya < termurahBiaya) termurahBiaya = biaya;
+  });
+  return Math.round(minTempat + minAlat + raw.izin.biaya + termurahBiaya);
+}
+function hashBidang(id) {
+  var h = 0;
+  for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function pilihBidang(state, bidangId) {
+  if (state.toko) return { ok: false, msg: 'Usaha sudah berjalan; bidang tidak bisa diganti di tengah jalan.' };
+  if (!BIDANG_DATA[bidangId]) return { ok: false, msg: 'Bidang tidak dikenal.' };
+  state.bidang = bidangId;
+  state.siap = { tempat: null, lokasi: null, peralatan: null, izin: false, menu: [], supplier: {}, stokAwal: false, promo: false, platform: false, halal: false };
+  muatBidang(bidangId);
+  state.fase = 'persiapan';
+  pushLog(state, 'Bidang dipilih: ' + NAMA_BIDANG + '. Masuk fase persiapan.');
+  return { ok: true, msg: 'Bidang ' + NAMA_BIDANG + ' dipilih.' };
+}
 
 // Supplier: 3 arketipe per input (baris DATA, bukan kode khusus).
 var SUPPLIER_ARKE = [
@@ -51,46 +133,31 @@ function supplierInfo(inputId, arkeId) {
   return { inputId: inputId, arkeId: arkeId, nama: a.nama, harga: Math.round(INPUT_HARGA[inputId] * a.pengaliHarga), kirimHari: a.kirimHari, tempoHari: a.tempoHari, andal: a.andal };
 }
 
-// Persiapan kuliner: tempat, lokasi, peralatan, izin, opsional.
-var TEMPAT = {
-  gerobak: { nama: 'Gerobak / Kaki Lima', biaya: 150000, sewaBulan: 100000, kapasitas: 30 },
-  kios: { nama: 'Kios', biaya: 1000000, sewaBulan: 500000, kapasitas: 80 },
-  ruko: { nama: 'Ruko', biaya: 3000000, sewaBulan: 1500000, kapasitas: 200 }
-};
+// Lokasi: tier generik, berlaku semua bidang (lokasi per bidang = pendalaman data nanti).
 var LOKASI = {
   kampus: { nama: 'Dekat Kampus', tier: 'ramai', faktorTempat: 1.3, pengaliSewa: 2.0 },
   pasar: { nama: 'Dekat Pasar', tier: 'ramai', faktorTempat: 1.3, pengaliSewa: 2.0 },
   perumahan: { nama: 'Perumahan', tier: 'sedang', faktorTempat: 1.0, pengaliSewa: 1.3 },
   pinggir: { nama: 'Pinggir Kota', tier: 'sepi', faktorTempat: 0.7, pengaliSewa: 1.0 }
 };
-var PERALATAN = {
-  sederhana: { nama: 'Sederhana', biaya: 100000, kapasitas: 20, mutu: 0 },
-  lengkap: { nama: 'Lengkap (+pendingin)', biaya: 500000, kapasitas: 60, mutu: 0.05 }
-};
-var IZIN = { nama: 'NIB + Sertifikat (PIRT / Laik Higiene)', biaya: 150000, hari: 3 };
-var OPSIONAL = {
-  promo: { nama: 'Promo Pembukaan', biaya: 100000, hari: 1, efek: 'Reputasi awal +0,10' },
-  platform: { nama: 'Daftar Platform Antar', biaya: 0, hari: 1, efek: 'Permintaan x1,15, pendapatan x0,85 (komisi)' },
-  halal: { nama: 'Sertifikat Halal', biaya: 200000, hari: 7, efek: 'Permintaan x1,10' }
-};
-// Musim kuliner per bulan (1-12), data sementara.
-var MUSIM = { 1: 1.0, 2: 0.95, 3: 1.0, 4: 1.05, 5: 1.0, 6: 1.1, 7: 1.0, 8: 1.0, 9: 0.95, 10: 1.0, 11: 1.05, 12: 1.15 };
-var PESAING = 5; // jumlah pesaing kuliner (data)
 var PAJAK_PERSEN = 0.005; // PPh final UMKM 0,5% dari omzet/bulan
 var DENDA_TELAT_PERSEN = 0.02; // denda 2% per hari keterlambatan kewajiban
 
 // ---------- STATE ----------
 function createState(seed) {
-  return {
+  var st = {
     kas: MODAL_AWAL, hari: 1, tanggal: todayISO(), seed: seed || Math.floor(Math.random() * 1000000000),
-    fase: 'riset', // riset -> persiapan -> toko -> bangkrut | menang
-    riset: { lapis1: false, lapis2: false, lapis3: null }, // lapis3: null | {hariKe, hasil:[]}
+    fase: 'pilihBidang', // pilihBidang -> persiapan -> toko -> bangkrut | menang
+    bidang: 'kuliner', risetDipilih: null,
+    riset: {}, // bidangId -> { lapis1, lapis2, lapis3: null | {hasil:[]} }
     siap: { tempat: null, lokasi: null, peralatan: null, izin: false, menu: [], supplier: {}, stokAwal: false, promo: false, platform: false, halal: false },
     toko: null, // diisi saat buka usaha
     praPinjaman: [], // pinjaman yang diambil sebelum toko buka, diubah jadi kewajiban saat buka
     omzetBulan: 0, bulanBerjalan: null,
-    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Mulai dari riset pasar, lalu siapkan usahamu satu per satu.' }]
+    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Pilih bidang, riset pasarnya, lalu siapkan usahamu satu per satu.' }]
   };
+  muatBidang('kuliner');
+  return st;
 }
 function pushLog(state, teks) {
   state.log.unshift({ hari: state.hari, teks: teks });
@@ -113,50 +180,81 @@ function runwayHari(state) {
   return Math.max(0, Math.floor(state.kas / tetap));
 }
 
-// ---------- RISET (3 lapis) ----------
-function risetLapis1(state) {
-  if (state.riset.lapis1) return { ok: false, msg: 'Gambaran kasar sudah dilihat.' };
-  state.riset.lapis1 = true;
-  pushLog(state, 'Riset kasar: kuliner butuh modal masuk sekitar Rp 400rb–3jt, harga jual Rp 10rb–15rb, sinyal: ramai.');
+// ---------- RISET (3 lapis, per bidang; hasil tersimpan & bisa dibandingkan) ----------
+function risetBidang(state, bidangId) {
+  var id = bidangId || state.risetDipilih || state.bidang || 'kuliner';
+  if (!BIDANG_DATA[id]) return null;
+  if (!state.riset) state.riset = {};
+  if (!state.riset[id]) state.riset[id] = { lapis1: false, lapis2: false, lapis3: null };
+  return { id: id, data: state.riset[id] };
+}
+function teksLapis1(bidangId) {
+  var raw = BIDANG_DATA[bidangId];
+  var hargas = Object.keys(raw.produk).map(function (pid) { return raw.produk[pid].hargaAcuan; });
+  var minH = Math.min.apply(null, hargas), maxH = Math.max.apply(null, hargas);
+  return raw.nama + ' butuh modal masuk paling hemat sekitar ' + fmtRp(modalKasarBidang(bidangId)) + ', harga jual ' + fmtRp(minH) + '–' + fmtRp(maxH) + ', sinyal: ' + sinyalBidang(bidangId) + '.';
+}
+function teksLapis2(bidangId) {
+  var raw = BIDANG_DATA[bidangId];
+  var daftar = Object.keys(raw.produk).map(function (pid) { return raw.produk[pid].nama + ' (' + fmtRp(raw.produk[pid].hargaAcuan) + ')'; }).join(', ');
+  var cara = raw.jenis === 'jasa' ? 'jual slot kapasitas harian (tidak terjual = hangus)' : 'jual barang langsung, bisa lewat platform antar';
+  return 'Rincian modal (tempat, alat, stok awal, izin), harga pasar per produk: ' + daftar + ', ' + raw.pesaing + ' pesaing, cara jualan: ' + cara + ', daftar persiapan: tempat, lokasi, peralatan, izin, produk/jasa awal, supplier, stok awal.';
+}
+function risetLapis1(state, bidangId) {
+  var r = risetBidang(state, bidangId);
+  if (!r) return { ok: false, msg: 'Bidang tidak dikenal.' };
+  if (r.data.lapis1) return { ok: false, msg: 'Gambaran kasar sudah dilihat.' };
+  r.data.lapis1 = true;
+  state.risetDipilih = r.id;
+  pushLog(state, 'Riset kasar [' + BIDANG_DATA[r.id].nama + ']: ' + teksLapis1(r.id));
   return { ok: true, msg: 'Gambaran kasar didapat (gratis).' };
 }
-function risetLapis2(state) {
-  if (!state.riset.lapis1) return { ok: false, msg: 'Lihat gambaran kasar dulu.' };
-  if (state.riset.lapis2) return { ok: false, msg: 'Laporan detail sudah didapat.' };
+function risetLapis2(state, bidangId) {
+  var r = risetBidang(state, bidangId);
+  if (!r) return { ok: false, msg: 'Bidang tidak dikenal.' };
+  if (!r.data.lapis1) return { ok: false, msg: 'Lihat gambaran kasar dulu.' };
+  if (r.data.lapis2) return { ok: false, msg: 'Laporan detail sudah didapat.' };
   var biaya = 50000, hari = 2;
   if (state.kas < biaya) return { ok: false, msg: 'Kas tidak cukup untuk laporan detail (' + fmtRp(biaya) + ').' };
   state.kas -= biaya;
   state.tanggal = addDays(state.tanggal, hari);
   state.hari += hari;
-  state.riset.lapis2 = true;
-  pushLog(state, 'Laporan detail dibeli (' + fmtRp(biaya) + ', ' + hari + ' hari): rincian modal, harga pasar, ' + PESAING + ' pesaing, cara jualan umum, daftar persiapan.');
+  r.data.lapis2 = true;
+  state.risetDipilih = r.id;
+  pushLog(state, 'Laporan detail [' + BIDANG_DATA[r.id].nama + '] dibeli (' + fmtRp(biaya) + ', ' + hari + ' hari).');
   return { ok: true, msg: 'Laporan detail didapat.' };
 }
-function risetLapis3(state) {
-  if (!state.riset.lapis2) return { ok: false, msg: 'Beli laporan detail dulu.' };
-  if (state.riset.lapis3) return { ok: false, msg: 'Uji pasar sudah dilakukan.' };
+function risetLapis3(state, bidangId) {
+  var r = risetBidang(state, bidangId);
+  if (!r) return { ok: false, msg: 'Bidang tidak dikenal.' };
+  if (!r.data.lapis2) return { ok: false, msg: 'Beli laporan detail dulu.' };
+  if (r.data.lapis3) return { ok: false, msg: 'Uji pasar sudah dilakukan.' };
   var modalUji = 100000;
   if (state.kas < modalUji) return { ok: false, msg: 'Kas tidak cukup untuk uji pasar (' + fmtRp(modalUji) + ').' };
   state.kas -= modalUji;
-  // Uji pasar: 3 hari jualan percobaan dengan rumus permintaan yang sama.
+  // Uji pasar: 3 hari jualan percobaan, dasar = rata-rata permintaan bidang itu.
+  var raw = BIDANG_DATA[r.id];
+  var totalDasar = 0, nProd = 0;
+  Object.keys(raw.produk).forEach(function (pid) { totalDasar += raw.produk[pid].permintaanDasar; nProd++; });
+  var dasar = Math.round(totalDasar / nProd);
   var hasil = [];
   for (var i = 0; i < 3; i++) {
-    var rng = mulberry32(state.seed + 999 + i * 131);
-    var permintaan = Math.round(20 * (0.8 + rng() * 0.4));
+    var rng = mulberry32(state.seed + hashBidang(r.id) + 999 + i * 131);
+    var permintaan = Math.round(dasar * (0.8 + rng() * 0.4));
     var terjual = Math.min(permintaan, 15); // stok percobaan terbatas
     hasil.push({ hari: i + 1, permintaan: permintaan, terjual: terjual });
   }
   state.tanggal = addDays(state.tanggal, 3);
   state.hari += 3;
-  state.riset.lapis3 = { hasil: hasil };
-  pushLog(state, 'Uji pasar selesai (modal ' + fmtRp(modalUji) + ', 3 hari): data penjualan beneran dari simulasi.');
+  r.data.lapis3 = { hasil: hasil };
+  state.risetDipilih = r.id;
+  pushLog(state, 'Uji pasar [' + raw.nama + '] selesai (modal ' + fmtRp(modalUji) + ', 3 hari): data penjualan beneran dari simulasi.');
   return { ok: true, msg: 'Uji pasar selesai.' };
 }
 
 // ---------- PERSIAPAN ----------
 function persiapanBeli(state, jenis, id) {
-  if (state.fase !== 'persiapan' && state.fase !== 'riset') return { ok: false, msg: 'Bukan fase persiapan.' };
-  if (state.fase === 'riset') state.fase = 'persiapan';
+  if (state.fase !== 'persiapan') return { ok: false, msg: 'Pilih bidang dulu, baru persiapan.' };
   var s = state.siap;
   if (jenis === 'tempat') {
     if (s.tempat) return { ok: false, msg: 'Tempat sudah dipilih.' };
@@ -185,7 +283,7 @@ function persiapanBeli(state, jenis, id) {
     if (s.menu.indexOf(id) >= 0) return { ok: false, msg: 'Produk sudah ada di menu.' };
     if (!PRODUK[id]) return { ok: false, msg: 'Produk tidak dikenal.' };
     s.menu.push(id);
-    pushLog(state, 'Menu ditambah: ' + PRODUK[id].nama + '.');
+    pushLog(state, (JENIS_BIDANG === 'jasa' ? 'Jasa ditambah: ' : 'Menu ditambah: ') + PRODUK[id].nama + '.');
   } else if (jenis === 'supplier') {
     // id = "inputId:arkeId"
     var parts = id.split(':');
@@ -228,7 +326,7 @@ function bukaUsaha(state) {
   var sewaBulan = Math.round(TEMPAT[s.tempat].sewaBulan * LOKASI[s.lokasi].pengaliSewa);
   var reputasi = 1.0 + (s.promo ? 0.10 : 0) + PERALATAN[s.peralatan].mutu;
   state.toko = {
-    bidang: 'kuliner', tempat: s.tempat, lokasi: s.lokasi, peralatan: s.peralatan,
+    bidang: state.bidang, tempat: s.tempat, lokasi: s.lokasi, peralatan: s.peralatan,
     sewaBulan: sewaBulan, reputasi: reputasi,
     stok: {}, bahan: {}, harga: {}, pesanan: [], kewajiban: [],
     hubungan: {}, // supplierKey -> level 0..5
@@ -442,6 +540,12 @@ function jalankanHari(state, diskonPersen) {
     laporan.push({ produk: p.nama, permintaan: permintaan, terjual: terjual, pendapatan: hasil });
     if (terjual > 0) t.reputasi = Math.min(1.5, t.reputasi + 0.005);
   });
+  // Bidang jasa: kapasitas harian yang tak terjual hangus di akhir hari.
+  if (JENIS_BIDANG === 'jasa') {
+    var hangus = 0;
+    state.siap.menu.forEach(function (pid) { hangus += t.stok[pid] || 0; t.stok[pid] = 0; });
+    if (hangus > 0) pushLog(state, 'Slot jasa tak terjual hangus: ' + hangus + ' unit (kapasitas harian tidak bisa disimpan).');
+  }
   state.kas += pendapatan;
   state.omzetBulan += pendapatan;
   // Malam: kewajiban jatuh tempo -> denda & konsekuensi lapis 2.
@@ -496,12 +600,12 @@ function jalankanHari(state, diskonPersen) {
 }
 
 // ---------- TAHAP B: KARYAWAN ----------
-var PERAN_KULINER = ['Koki', 'Pelayan', 'Kasir'];
+// Peran kandidat diambil dari PERAN (bidang aktif, diisi muatBidang).
 var NAMA_KANDIDAT = ['Andi', 'Budi', 'Citra', 'Dewi', 'Eko', 'Fitri', 'Gilang', 'Hana', 'Irfan', 'Joko', 'Kartika', 'Lukman', 'Maya', 'Nina', 'Omar', 'Putri', 'Rudi', 'Sari', 'Tono', 'Wulan'];
 function gajiDariSkill(skill) { return 300000 + skill * 200000; }
 function buatKandidat(state) {
   var rng = mulberry32(state.seed + state.hari * 101 + Math.floor(Math.random() * 100000));
-  var peran = PERAN_KULINER[Math.floor(rng() * PERAN_KULINER.length)];
+  var peran = PERAN[Math.floor(rng() * PERAN.length)];
   var nama = NAMA_KANDIDAT[Math.floor(rng() * NAMA_KANDIDAT.length)];
   var skill = 1 + Math.floor(rng() * 5);
   return { id: 'k' + state.hari + '-' + Math.floor(rng() * 100000), nama: nama, peran: peran, skill: skill, gaji: gajiDariSkill(skill) };
@@ -640,7 +744,7 @@ if (typeof document !== 'undefined') {
   function muat() {
     try {
       var raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; return; } }
+      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; if (!state.bidang) state.bidang = 'kuliner'; if (state.riset && typeof state.riset.lapis1 !== 'undefined') { state.riset = { kuliner: state.riset }; } if (!state.riset) state.riset = {}; muatBidang(state.bidang); return; } }
     } catch (e) { /* abaikan */ }
     state = createState();
   }
@@ -659,12 +763,39 @@ if (typeof document !== 'undefined') {
     el('log').innerHTML = state.log.map(function (e) { return '<li>Hari ' + e.hari + ': ' + e.teks + '</li>'; }).join('');
   }
   function renderRiset() {
-    var html = '';
-    if (state.riset.lapis1) html += '<p><strong>Gambaran kasar (gratis):</strong> kuliner butuh modal masuk sekitar Rp 400rb–3jt, harga jual Rp 10rb–15rb, sinyal: ramai.</p>';
-    if (state.riset.lapis2) html += '<p><strong>Laporan detail:</strong> rincian modal (sewa, alat, stok awal, izin), harga pasar per produk, ' + PESAING + ' pesaing, cara jualan umum (langsung, platform antar), daftar persiapan.</p>';
-    if (state.riset.lapis3) html += '<p><strong>Uji pasar (3 hari):</strong> ' + state.riset.lapis3.hasil.map(function (h) { return 'hari ' + h.hari + ': minta ' + h.permintaan + ', laku ' + h.terjual; }).join(' | ') + '.</p>';
-    if (!html) html = '<p>Belum ada riset. Mulai dari gambaran kasar (gratis), lalu laporan detail, lalu uji pasar.</p>';
-    el('riset-info').innerHTML = html;
+    var grid = '<div id="bidang-grid">';
+    Object.keys(BIDANG_DATA).forEach(function (id, i) {
+      var f = BIDANG_DATA[id];
+      var diteliti = state.riset && state.riset[id] && state.riset[id].lapis1;
+      var aktif = state.risetDipilih === id;
+      grid += '<button class="btn' + (aktif ? ' btn-aktif' : '') + '" data-bidang="' + id + '">' + (i + 1) + '. ' + f.nama + ' (' + (f.jenis === 'jasa' ? 'jasa' : 'barang') + ')' + (diteliti ? ' ✓' : '') + '</button> ';
+    });
+    grid += '</div>';
+    var panel = '';
+    var dipilih = state.risetDipilih || state.bidang;
+    if (dipilih && BIDANG_DATA[dipilih]) {
+      var f = BIDANG_DATA[dipilih];
+      var r = (state.riset && state.riset[dipilih]) || { lapis1: false, lapis2: false, lapis3: null };
+      panel = '<h3>' + f.nama + ' (' + (f.jenis === 'jasa' ? 'jasa: kapasitas harian hangus' : 'barang: stok fisik') + ')</h3>';
+      if (r.lapis1) panel += '<p><strong>Gambaran kasar (gratis):</strong> ' + teksLapis1(dipilih) + '</p>';
+      if (r.lapis2) panel += '<p><strong>Laporan detail:</strong> ' + teksLapis2(dipilih) + '</p>';
+      if (r.lapis3) panel += '<p><strong>Uji pasar (3 hari):</strong> ' + r.lapis3.hasil.map(function (h) { return 'hari ' + h.hari + ': minta ' + h.permintaan + ', laku ' + h.terjual; }).join(' | ') + '.</p>';
+      if (!r.lapis1) panel += '<p>Belum ada riset. Mulai dari gambaran kasar (gratis), lalu laporan detail, lalu uji pasar.</p>';
+      panel += '<div class="row"><button class="btn" id="btn-riset1">Gambaran Kasar (gratis)</button> <button class="btn" id="btn-riset2">Laporan Detail (Rp50.000, 2 hari)</button> <button class="btn" id="btn-riset3">Uji Pasar (modal Rp100.000, 3 hari)</button> <button class="btn btn-primary" id="btn-ke-persiapan">Mulai Persiapan ' + f.nama + ' →</button></div>';
+    }
+    var banding = '';
+    var ditelitiIds = state.riset ? Object.keys(state.riset).filter(function (id) { return state.riset[id].lapis1; }) : [];
+    if (ditelitiIds.length) {
+      banding = '<h3>Perbandingan bidang yang sudah diriset</h3><p>' + ditelitiIds.map(function (id) { return BIDANG_DATA[id].nama + ': modal hemat ' + fmtRp(modalKasarBidang(id)) + ', sinyal ' + sinyalBidang(id); }).join(' | ') + '</p>';
+    }
+    el('riset-info').innerHTML = grid + panel + banding;
+    el('riset-info').querySelectorAll('button[data-bidang]').forEach(function (btn) {
+      btn.addEventListener('click', function () { state.risetDipilih = btn.getAttribute('data-bidang'); simpan(); render(); });
+    });
+    var b1 = el('btn-riset1'); if (b1) b1.addEventListener('click', function () { aksi(function () { return risetLapis1(state, state.risetDipilih || state.bidang); }); });
+    var b2 = el('btn-riset2'); if (b2) b2.addEventListener('click', function () { aksi(function () { return risetLapis2(state, state.risetDipilih || state.bidang); }); });
+    var b3 = el('btn-riset3'); if (b3) b3.addEventListener('click', function () { aksi(function () { return risetLapis3(state, state.risetDipilih || state.bidang); }); });
+    var bk = el('btn-ke-persiapan'); if (bk) bk.addEventListener('click', function () { aksi(function () { return pilihBidang(state, state.risetDipilih || state.bidang); }); });
   }
   function btnList(containerId, items, onClick) {
     var html = '';
@@ -678,6 +809,8 @@ if (typeof document !== 'undefined') {
   }
   function renderPersiapan() {
     var s = state.siap;
+    el('btn-izin').textContent = 'Urus ' + IZIN.nama + ' (' + fmtRp(IZIN.biaya) + ', ' + IZIN.hari + ' hari)';
+    el('menu-judul').textContent = (JENIS_BIDANG === 'jasa' ? 'Jasa Awal' : 'Menu Awal') + ' (wajib, pilih minimal 1)';
     btnList('opsi-tempat', Object.keys(TEMPAT).map(function (id) {
       return { id: id, label: TEMPAT[id].nama + ' (' + fmtRp(TEMPAT[id].biaya) + ')', disabled: !!s.tempat };
     }), function (id) { aksi(function () { return persiapanBeli(state, 'tempat', id); }); });
@@ -710,12 +843,12 @@ if (typeof document !== 'undefined') {
     btnList('opsi-opsional', Object.keys(OPSIONAL).map(function (id) {
       return { id: id, label: OPSIONAL[id].nama + ' (' + fmtRp(OPSIONAL[id].biaya) + ') — ' + OPSIONAL[id].efek, disabled: !!s[id] };
     }), function (id) { aksi(function () { return persiapanBeli(state, 'opsional', id); }); });
-    el('persiapan-status').textContent = 'Wajib: tempat ' + (s.tempat ? '✓' : '–') + ' | lokasi ' + (s.lokasi ? '✓' : '–') + ' | peralatan ' + (s.peralatan ? '✓' : '–') + ' | izin ' + (s.izin ? '✓' : '–') + ' | menu ' + (s.menu.length ? s.menu.map(function (m) { return PRODUK[m].nama; }).join(', ') : '–') + ' | supplier ' + (butuh.length && butuh.every(function (i) { return !!s.supplier[i]; }) ? '✓' : '–') + ' | stok awal ' + (s.stokAwal ? '✓' : '–');
+    el('persiapan-status').textContent = 'Wajib: tempat ' + (s.tempat ? '✓' : '–') + ' | lokasi ' + (s.lokasi ? '✓' : '–') + ' | peralatan ' + (s.peralatan ? '✓' : '–') + ' | izin ' + (s.izin ? '✓' : '–') + ' | ' + (JENIS_BIDANG === 'jasa' ? 'jasa ' : 'menu ') + (s.menu.length ? s.menu.map(function (m) { return PRODUK[m].nama; }).join(', ') : '–') + ' | supplier ' + (butuh.length && butuh.every(function (i) { return !!s.supplier[i]; }) ? '✓' : '–') + ' | stok awal ' + (s.stokAwal ? '✓' : '–');
     el('btn-buka').disabled = !persiapanWajibLengkap(state);
   }
   function renderToko() {
     var t = state.toko;
-    var info = 'Bidang: Kuliner | Tempat: ' + TEMPAT[t.tempat].nama + ' | Lokasi: ' + LOKASI[t.lokasi].nama + ' (' + LOKASI[t.lokasi].tier + ') | Sewa: ' + fmtRp(t.sewaBulan) + '/bulan | Reputasi: ' + t.reputasi.toFixed(2) + ' | Kapasitas: ' + t.kapasitas + ' unit/hari (produksi hari ini: ' + t.produksiHariIni + ')';
+    var info = 'Bidang: ' + NAMA_BIDANG + ' | Tempat: ' + TEMPAT[t.tempat].nama + ' | Lokasi: ' + LOKASI[t.lokasi].nama + ' (' + LOKASI[t.lokasi].tier + ') | Sewa: ' + fmtRp(t.sewaBulan) + '/bulan | Reputasi: ' + t.reputasi.toFixed(2) + ' | Kapasitas: ' + t.kapasitas + ' unit/hari (produksi hari ini: ' + t.produksiHariIni + ')';
     el('toko-info').textContent = info;
     el('stok-info').textContent = state.siap.menu.map(function (pid) { return PRODUK[pid].nama + ': stok ' + t.stok[pid] + ', harga ' + fmtRp(t.harga[pid]); }).join(' | ');
     el('bahan-info').textContent = Object.keys(t.bahan).map(function (inp) { return INPUT_NAMA[inp] + ': ' + t.bahan[inp]; }).join(' | ') || 'Belum ada bahan.';
@@ -773,11 +906,15 @@ if (typeof document !== 'undefined') {
   }
   function render() {
     renderHeader();
-    el('layar-riset').style.display = state.fase === 'riset' || state.fase === 'persiapan' ? 'block' : 'none';
-    el('layar-persiapan').style.display = state.fase === 'persiapan' || state.fase === 'riset' ? 'block' : 'none';
+    var risetTampil = state.fase === 'pilihBidang' || state.fase === 'riset' || state.fase === 'persiapan';
+    el('layar-riset').style.display = risetTampil ? 'block' : 'none';
+    el('layar-persiapan').style.display = state.fase === 'persiapan' ? 'block' : 'none';
     el('layar-toko').style.display = state.fase === 'toko' ? 'block' : 'none';
     el('layar-akhir').style.display = (state.fase === 'bangkrut' || state.fase === 'menang') ? 'block' : 'none';
-    if (state.fase === 'riset' || state.fase === 'persiapan') { renderRiset(); renderPersiapan(); }
+    el('persiapan-judul').textContent = '2. Persiapan Buka Usaha — ' + NAMA_BIDANG;
+    el('toko-judul').textContent = '3. Usaha Berjalan — ' + NAMA_BIDANG;
+    if (risetTampil) renderRiset();
+    if (state.fase === 'persiapan') renderPersiapan();
     if (state.fase === 'toko') renderToko();
     if (state.fase === 'bangkrut') { el('akhir-judul').textContent = 'BANGKRUT'; el('akhir-isi').textContent = 'Usaha tutup. Kas ' + fmtRp(state.kas) + '. Lihat log untuk urutan kesalahanmu, lalu coba lagi dengan keputusan berbeda.'; }
     if (state.fase === 'menang') { el('akhir-judul').textContent = 'MENANG — KONGLOMERAT!'; el('akhir-isi').textContent = 'Total aset mencapai ' + fmtRp(TARGET_MENANG) + '. Dari modal ' + fmtRp(MODAL_AWAL) + ' menjadi konglomerat!'; }
@@ -785,10 +922,7 @@ if (typeof document !== 'undefined') {
   }
   document.addEventListener('DOMContentLoaded', function () {
     muat();
-    el('btn-riset1').addEventListener('click', function () { aksi(function () { return risetLapis1(state); }); });
-    el('btn-riset2').addEventListener('click', function () { aksi(function () { return risetLapis2(state); }); });
-    el('btn-riset3').addEventListener('click', function () { aksi(function () { return risetLapis3(state); }); });
-    el('btn-ke-persiapan').addEventListener('click', function () { aksi(function () { state.fase = 'persiapan'; pushLog(state, 'Masuk fase persiapan.'); return { ok: true }; }); });
+    // Tombol riset & pilih bidang di-render dinamis oleh renderRiset (diikat di sana).
     el('btn-izin').addEventListener('click', function () { aksi(function () { return persiapanBeli(state, 'izin', 'x'); }); });
     el('btn-stok-awal').addEventListener('click', function () { aksi(function () { return persiapanBeli(state, 'stokAwal', 'x'); }); });
     el('btn-buka').addEventListener('click', function () { aksi(function () { return bukaUsaha(state); }); });
@@ -830,5 +964,5 @@ if (typeof document !== 'undefined') {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { createState: createState, risetLapis1: risetLapis1, risetLapis2: risetLapis2, risetLapis3: risetLapis3, persiapanBeli: persiapanBeli, persiapanWajibLengkap: persiapanWajibLengkap, bukaUsaha: bukaUsaha, ambilPinjaman: ambilPinjaman, jualPeralatan: jualPeralatan, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, bayarKewajiban: bayarKewajiban, jalankanHari: jalankanHari, runwayHari: runwayHari, rekrut: rekrut, pecat: pecat, pilihEvent: pilihEvent, gulirEvent: gulirEvent, refreshKandidat: refreshKandidat, hitungKapasitas: hitungKapasitas, efekPengali: efekPengali, buatEvent: buatEvent, PRODUK: PRODUK, TEMPAT: TEMPAT, LOKASI: LOKASI, PERALATAN: PERALATAN, SUPPLIER_ARKE: SUPPLIER_ARKE, fmtRp: fmtRp };
+  module.exports = { createState: createState, risetLapis1: risetLapis1, risetLapis2: risetLapis2, risetLapis3: risetLapis3, pilihBidang: pilihBidang, muatBidang: muatBidang, normalisasiBidang: normalisasiBidang, sinyalBidang: sinyalBidang, modalKasarBidang: modalKasarBidang, teksLapis1: teksLapis1, teksLapis2: teksLapis2, persiapanBeli: persiapanBeli, persiapanWajibLengkap: persiapanWajibLengkap, bukaUsaha: bukaUsaha, ambilPinjaman: ambilPinjaman, jualPeralatan: jualPeralatan, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, bayarKewajiban: bayarKewajiban, jalankanHari: jalankanHari, runwayHari: runwayHari, rekrut: rekrut, pecat: pecat, pilihEvent: pilihEvent, gulirEvent: gulirEvent, refreshKandidat: refreshKandidat, hitungKapasitas: hitungKapasitas, efekPengali: efekPengali, buatEvent: buatEvent, BIDANG: BIDANG_DATA, PRODUK: PRODUK, TEMPAT: TEMPAT, LOKASI: LOKASI, PERALATAN: PERALATAN, SUPPLIER_ARKE: SUPPLIER_ARKE, fmtRp: fmtRp };
 }

@@ -20,5 +20,6 @@ h3 { margin: 16px 0 6px; font-size: 14px; text-transform: uppercase; letter-spac
 input, select { padding: 6px 8px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 14px; }
 .muted { color: #64748B; font-size: 13px; }
 .event-box { background: #FFFBEB; border: 1px solid #F59E0B; border-radius: 8px; padding: 12px; margin: 10px 0; }
+#bidang-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
 #log { max-height: 260px; overflow-y: auto; padding-left: 20px; }
 #log li { margin-bottom: 4px; }
