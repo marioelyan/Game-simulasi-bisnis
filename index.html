@@ -1,95 +1,115 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simulasi Bisnis</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konglomerat — Simulasi Bisnis</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <div class="brand-title">SIMULASI BISNIS</div>
-    <div class="brand-sub" id="brand-sub">Pilih usahamu dulu</div>
+<header>
+  <div>
+    <div class="brand">KONGLOMERAT</div>
+    <div class="brand-sub">Dari Rp500 ribu ke Rp50 miliar</div>
   </div>
-  <div class="top-stats">
-    <div class="top-stat"><span class="label">Kas</span><strong id="kas">Rp 500.000</strong></div>
-    <div class="top-stat"><span class="label">Tanggal</span><strong id="tanggal">-</strong></div>
-    <div class="top-stat"><span class="label">Hari ke</span><strong id="hari">1</strong></div>
-  </div>
-  <div class="top-actions">
-    <button id="btn-hari" class="btn btn-primary">Hari Berikutnya &raquo;</button>
-    <button id="btn-baru" class="btn btn-ghost">Usaha Baru</button>
+  <div class="stats">
+    <span>Kas: <strong id="kas">-</strong></span>
+    <span>Tanggal: <strong id="tanggal">-</strong></span>
+    <span>Hari: <strong id="hari">-</strong></span>
+    <span>Runway: <strong id="runway">-</strong></span>
+    <button class="btn btn-kecil" id="btn-baru">Mulai Baru</button>
   </div>
 </header>
 
 <main>
-  <section class="panel" id="layar-pilih">
-    <h2>Pilih Usahamu</h2>
-    <p class="hint">Kamu punya modal Rp 500.000. Lihat peluang tiap produk, lalu buka usaha yang mau dijalankan. Set produk awal dibatasi dulu; katalog akan diperluas belakangan.</p>
-    <div class="produk-grid" id="daftar-produk"></div>
+  <section id="layar-riset" class="card">
+    <h2>1. Riset Pasar — Kuliner</h2>
+    <p>Riset dulu sebelum buka usaha. Tanpa jawaban mentah: yang kamu dapat perkiraan, rentang, dan sinyal.</p>
+    <div id="riset-info"></div>
+    <div class="row">
+      <button class="btn" id="btn-riset1">Gambaran Kasar (gratis)</button>
+      <button class="btn" id="btn-riset2">Laporan Detail (Rp50.000, 2 hari)</button>
+      <button class="btn" id="btn-riset3">Uji Pasar (modal Rp100.000, 3 hari)</button>
+      <button class="btn btn-primary" id="btn-ke-persiapan">Lanjut ke Persiapan →</button>
+    </div>
   </section>
 
-  <div id="layar-toko" style="display:none">
-    <section class="cards">
-      <div class="card">
-        <div class="card-label">Penjualan Hari Ini</div>
-        <div class="card-value" id="penjualan-hari-ini">Rp 0</div>
-        <div class="card-sub" id="terjual-hari-ini">0 unit terjual</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Stok Produk</div>
-        <div class="card-value" id="stok-produk">0 unit</div>
-        <div class="card-sub">Siap jual</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Bahan</div>
-        <div class="card-value" id="bahan-ringkas">-</div>
-        <div class="card-sub">Stok bahan saat ini</div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2>Aksi</h2>
-      <div class="actions">
-        <span id="aksi-beli"></span>
-        <button id="btn-produksi" class="btn btn-green">Produksi 10</button>
-        <label class="price-box">
-          Harga jual / unit
-          <span class="price-input">
-            <span>Rp</span>
-            <input id="harga-jual" type="number" min="1000" step="500" value="15000">
-            <button id="btn-harga" class="btn btn-purple">Terapkan</button>
-          </span>
-        </label>
-      </div>
-      <p class="hint">Resep: 1 produk = 1 unit tiap bahan. Pelanggan membeli otomatis tiap hari sesuai harga dan stok.</p>
-    </section>
-
-    <section class="panel">
-      <h2>Daftar Produk &amp; Stok</h2>
-      <table>
-        <thead>
-          <tr><th>Produk</th><th>Stok</th><th>Harga</th><th>Terjual Hari Ini</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td id="tabel-produk">-</td>
-            <td id="tabel-stok">0</td>
-            <td id="tabel-harga">Rp 0</td>
-            <td id="tabel-terjual">0</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  </div>
-
-  <section class="panel">
-    <h2>Catatan Harian</h2>
-    <ul id="log" class="log"></ul>
+  <section id="layar-persiapan" class="card">
+    <h2>2. Persiapan Buka Usaha — Kuliner</h2>
+    <p>Urus satu per satu. Tiap item makan uang dan waktu. Ada prasyarat: tempat dulu baru peralatan, menu dulu baru supplier, supplier dulu baru stok awal.</p>
+    <h3>Tempat (wajib)</h3>
+    <div id="opsi-tempat" class="row"></div>
+    <h3>Lokasi (wajib)</h3>
+    <div id="opsi-lokasi" class="row"></div>
+    <h3>Peralatan (wajib)</h3>
+    <div id="opsi-peralatan" class="row"></div>
+    <h3>Izin (wajib)</h3>
+    <div class="row"><button class="btn" id="btn-izin">Urus NIB + Sertifikat (Rp150.000, 3 hari)</button></div>
+    <h3>Menu Awal (wajib, pilih minimal 1)</h3>
+    <div id="opsi-menu" class="row"></div>
+    <h3>Supplier Awal (wajib, 1 per input)</h3>
+    <div id="supplier-area"></div>
+    <h3>Stok Awal (wajib)</h3>
+    <div class="row"><button class="btn" id="btn-stok-awal">Siapkan Stok Awal (5 unit per input)</button></div>
+    <h3>Opsional</h3>
+    <div id="opsi-opsional" class="row"></div>
+    <p class="muted">SDM awal (karyawan) menyusul di Tahap B.</p>
+    <p id="persiapan-status"></p>
+    <div class="row"><button class="btn btn-primary" id="btn-buka">Buka Usaha</button></div>
   </section>
 
-  <p class="foot">Tahap 1: pilih usaha, lalu loop beli &rarr; produksi &rarr; jual. Riset pasar tiga jalur (Amati, Tanya, Uji Jual) + buku catatan menyusul di tahap berikutnya. Angka-angka masih sementara dan bisa di-tuning. Judul game belum diputuskan.</p>
+  <section id="layar-toko" class="card">
+    <h2>3. Usaha Berjalan — Kuliner</h2>
+    <p id="toko-info"></p>
+    <p id="stok-info"></p>
+    <p id="bahan-info"></p>
+    <h3>Pagi: Keputusan</h3>
+    <div class="row">
+      <label>Beli bahan:
+        <select id="beli-input"></select>
+        <select id="beli-supplier"></select>
+        <input type="number" id="beli-qty" value="10" min="1">
+        <select id="beli-cara"><option value="tunai">Tunai</option><option value="tempo">Tempo</option></select>
+        <button class="btn" id="btn-beli">Beli</button>
+      </label>
+    </div>
+    <div class="row">
+      <label>Produksi:
+        <select id="prod-produk"></select>
+        <input type="number" id="prod-qty" value="10" min="1">
+        <button class="btn" id="btn-produksi">Produksi</button>
+      </label>
+    </div>
+    <div class="row">
+      <span>Atur harga:</span>
+      <span id="harga-area"></span>
+      <button class="btn" id="btn-harga">Simpan Harga</button>
+    </div>
+    <div class="row">
+      <label>Diskon hari ini (promo/obral, %): <input type="number" id="promo-diskon" value="0" min="0" max="90"></label>
+      <button class="btn btn-primary" id="btn-hari">Jalankan Hari →</button>
+    </div>
+    <p id="laporan-hari-ini"></p>
+    <h3>Kewajiban</h3>
+    <div id="kewajiban-list"></div>
+    <h3>Jalan Keluar Darurat</h3>
+    <div class="row">
+      <button class="btn" id="btn-pinj-normal">Pinjaman Normal (Rp2jt, bunga 10%, 30 hari)</button>
+      <button class="btn" id="btn-pinj-darurat">Pinjaman Darurat (Rp1jt, bunga 25%, 14 hari)</button>
+      <button class="btn" id="btn-jual-alat">Jual Peralatan (50% harga)</button>
+    </div>
+    <p class="muted">Aturan bangkrut: kas negatif = peringatan (tidak bisa beli stok baru, supplier minta tunai, pinjaman murah tertutup). Kewajiban menunggak = denda 2%/hari, reputasi turun, supplier berhenti melayani. Vonis bangkrut = kas negatif + tunggakan &gt; 30 hari + tidak ada aset bisa dijual.</p>
+  </section>
+
+  <section id="layar-akhir" class="card">
+    <h2 id="akhir-judul"></h2>
+    <p id="akhir-isi"></p>
+  </section>
+
+  <section class="card">
+    <h2>Log</h2>
+    <ul id="log"></ul>
+  </section>
 </main>
 
 <script src="app.js"></script>

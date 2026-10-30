@@ -1,58 +1,23 @@
+/* Konglomerat Tahap A — dashboard padat, serius, bukan anak-anak. */
 * { box-sizing: border-box; }
-body {
-  margin: 0;
-  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  background: #0f1c33;
-  color: #e8edf5;
-}
-.topbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: center;
-  justify-content: space-between;
-  background: #16233f;
-  border-bottom: 1px solid #2a3d63;
-  padding: 14px 20px;
-}
-.brand-title { font-size: 20px; font-weight: 800; letter-spacing: 1px; }
-.brand-sub { font-size: 12px; color: #9fb0cc; }
-.top-stats { display: flex; gap: 24px; }
-.top-stat .label { display: block; font-size: 11px; color: #9fb0cc; text-transform: uppercase; letter-spacing: 1px; }
-.top-stat strong { font-size: 17px; }
-.top-actions { display: flex; gap: 8px; }
-main { max-width: 960px; margin: 0 auto; padding: 20px; }
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
-.card { background: #1e2f4f; border: 1px solid #2a3d63; border-radius: 8px; padding: 14px; }
-.card-label { font-size: 12px; color: #9fb0cc; text-transform: uppercase; letter-spacing: 1px; }
-.card-value { font-size: 24px; font-weight: 700; margin: 6px 0 2px; }
-.card-sub { font-size: 13px; color: #9fb0cc; }
-.panel { background: #1e2f4f; border: 1px solid #2a3d63; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-.panel h2 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; color: #c7d3e8; }
-.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
-.btn { border: 0; border-radius: 6px; padding: 10px 14px; font-size: 14px; font-weight: 600; cursor: pointer; color: #fff; }
-.btn-primary { background: #2f6fe4; }
-.btn-blue { background: #2f6fe4; }
-.btn-green { background: #2e9e6b; }
-.btn-purple { background: #6c5ce7; }
-.btn-ghost { background: transparent; border: 1px solid #2a3d63; color: #c7d3e8; }
-.price-box { font-size: 13px; color: #9fb0cc; }
-.price-input { display: flex; gap: 6px; align-items: center; margin-top: 4px; color: #e8edf5; }
-.price-input input { width: 110px; padding: 9px; border-radius: 6px; border: 1px solid #2a3d63; background: #0f1c33; color: #e8edf5; font-size: 14px; }
-.hint, .foot { font-size: 13px; color: #9fb0cc; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #2a3d63; }
-th { color: #9fb0cc; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
-.log { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-.log li { padding: 7px 0; border-bottom: 1px solid #2a3d63; }
-.log li:last-child { border-bottom: 0; }
-.produk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
-.produk-card { background: #0f1c33; border: 1px solid #2a3d63; border-radius: 8px; padding: 14px; }
-.produk-nama { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
-.produk-info { font-size: 13px; color: #9fb0cc; margin-bottom: 4px; }
-.produk-card .btn { margin-top: 10px; }
-@media (max-width: 700px) {
-  .produk-grid { grid-template-columns: 1fr; }
-  .cards { grid-template-columns: 1fr; }
-  .top-stats { gap: 12px; }
-}
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #F1F5F9; color: #0F172A; font-size: 15px; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #0F172A; color: #F8FAFC; }
+.brand { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
+.brand-sub { font-size: 12px; color: #94A3B8; }
+.stats { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+main { max-width: 960px; margin: 0 auto; padding: 16px; }
+.card { background: #fff; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+h2 { margin: 0 0 8px; font-size: 18px; }
+h3 { margin: 16px 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+.btn { padding: 7px 12px; border: 1px solid #CBD5E1; background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.btn:hover { background: #F8FAFC; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #0F172A; color: #fff; border-color: #0F172A; }
+.btn-primary:hover { background: #1E293B; }
+.btn-aktif { border-color: #0F172A; background: #E2E8F0; font-weight: 600; }
+.btn-kecil { padding: 5px 10px; font-size: 13px; }
+input, select { padding: 6px 8px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 14px; }
+.muted { color: #64748B; font-size: 13px; }
+#log { max-height: 260px; overflow-y: auto; padding-left: 20px; }
+#log li { margin-bottom: 4px; }

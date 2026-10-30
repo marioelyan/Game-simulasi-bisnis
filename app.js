@@ -1,50 +1,15 @@
-// Simulasi Bisnis — Tahap 1: irisan vertikal.
-// Alur awal (perubahan desain 30 Okt dini hari): pemain mulai dengan modal,
-// MELIHAT PELUANG dulu, lalu MEMILIH usaha dari set awal yang dibatasi.
-// Baru setelah usaha dibuka, loop beli -> produksi -> jual berjalan.
-// Produk adalah DATA (bukan kode): nambah produk tidak mengubah mesin.
-// Angka-angka masih sementara dan bisa di-tuning (bukan keputusan final).
+// KONGLOMERAT — Tahap A: mesin inti + 1 bidang (kuliner).
+// Konsep yang dikunci (KONSEP.md): riset 3 lapis, persiapan satu per satu,
+// rumus permintaan lengkap, supplier berkarakter, bangkrut 3 lapis,
+// pajak fondasi (PPh final 0,5% omzet/bulan), menang = total aset Rp50 miliar.
+// Angka-angka di bawah ini DATA SEMENTARA (tuning nanti), bukan keputusan final.
+// Logika tidak bergantung DOM: bisa dites dari Node (lihat exports di bawah).
 
-var MODAL_AWAL = 500000;  // Rp, sesuai usulan awal
-var SAVE_KEY = 'simulasi-bisnis-save-v1';
+var MODAL_AWAL = 500000;
+var TARGET_MENANG = 50000000000;
+var SAVE_KEY = 'konglomerat-save-tahapA-v1';
 
-// Set awal yang dibatasi (MVP). Harga mendekati dunia nyata (sementara).
-var PRODUCTS = {
-  dimsum: {
-    nama: 'Dimsum',
-    bahan: [
-      { id: 'ayam', nama: 'Daging Ayam', harga: 8000 },
-      { id: 'kulit', nama: 'Kulit Pangsit', harga: 3000 }
-    ],
-    hargaAcuan: 15000,
-    permintaanDasar: 20
-  },
-  kopi: {
-    nama: 'Kopi Susu',
-    bahan: [
-      { id: 'kopi', nama: 'Biji Kopi', harga: 5000 },
-      { id: 'susu', nama: 'Gula & Susu', harga: 2000 }
-    ],
-    hargaAcuan: 12000,
-    permintaanDasar: 22
-  },
-  roti: {
-    nama: 'Roti Sobek',
-    bahan: [
-      { id: 'tepung', nama: 'Tepung', harga: 4000 },
-      { id: 'mentega', nama: 'Mentega', harga: 3000 }
-    ],
-    hargaAcuan: 10000,
-    permintaanDasar: 16
-  }
-};
-
-function sinyalPermintaan(permintaanDasar) {
-  if (permintaanDasar >= 20) return 'Tinggi';
-  if (permintaanDasar >= 15) return 'Sedang';
-  return 'Rendah';
-}
-
+// ---------- util ----------
 function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -53,240 +18,604 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-function fmtRp(n) {
-  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
-}
-
+function fmtRp(n) { return 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 function todayISO() {
   var d = new Date();
-  var m = String(d.getMonth() + 1).padStart(2, '0');
-  var day = String(d.getDate()).padStart(2, '0');
-  return d.getFullYear() + '-' + m + '-' + day;
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-
-function nextISO(iso) {
+function addDays(iso, n) {
   var d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + 1);
-  var m = String(d.getMonth() + 1).padStart(2, '0');
-  var day = String(d.getDate()).padStart(2, '0');
-  return d.getFullYear() + '-' + m + '-' + day;
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function monthOf(iso) { return parseInt(iso.slice(5, 7), 10); }
+
+// ---------- DATA: bidang kuliner ----------
+var PRODUK = {
+  dimsum: { nama: 'Dimsum', bahan: [{ id: 'ayam', nama: 'Daging Ayam', harga: 8000 }, { id: 'kulit', nama: 'Kulit Pangsit', harga: 3000 }], hargaAcuan: 15000, permintaanDasar: 20 },
+  kopi: { nama: 'Kopi Susu', bahan: [{ id: 'kopi', nama: 'Biji Kopi', harga: 5000 }, { id: 'gula_susu', nama: 'Gula & Susu', harga: 2000 }], hargaAcuan: 12000, permintaanDasar: 22 },
+  roti: { nama: 'Roti Sobek', bahan: [{ id: 'tepung', nama: 'Tepung', harga: 4000 }, { id: 'mentega', nama: 'Mentega', harga: 3000 }], hargaAcuan: 10000, permintaanDasar: 16 }
+};
+var INPUT_HARGA = { ayam: 8000, kulit: 3000, kopi: 5000, gula_susu: 2000, tepung: 4000, mentega: 3000 };
+var INPUT_NAMA = { ayam: 'Daging Ayam', kulit: 'Kulit Pangsit', kopi: 'Biji Kopi', gula_susu: 'Gula & Susu', tepung: 'Tepung', mentega: 'Mentega' };
+
+// Supplier: 3 arketipe per input (baris DATA, bukan kode khusus).
+var SUPPLIER_ARKE = [
+  { id: 'murah', nama: 'Murah tapi Lambat', pengaliHarga: 0.85, kirimHari: 3, tempoHari: 14, andal: 0.7 },
+  { id: 'tengah', nama: 'Seimbang', pengaliHarga: 1.0, kirimHari: 2, tempoHari: 7, andal: 0.9 },
+  { id: 'cepat', nama: 'Mahal tapi Cepat', pengaliHarga: 1.2, kirimHari: 1, tempoHari: 0, andal: 1.0 }
+];
+function supplierKey(inputId, arkeId) { return inputId + ':' + arkeId; }
+function supplierInfo(inputId, arkeId) {
+  var a = SUPPLIER_ARKE.filter(function (x) { return x.id === arkeId; })[0];
+  return { inputId: inputId, arkeId: arkeId, nama: a.nama, harga: Math.round(INPUT_HARGA[inputId] * a.pengaliHarga), kirimHari: a.kirimHari, tempoHari: a.tempoHari, andal: a.andal };
 }
 
+// Persiapan kuliner: tempat, lokasi, peralatan, izin, opsional.
+var TEMPAT = {
+  gerobak: { nama: 'Gerobak / Kaki Lima', biaya: 150000, sewaBulan: 100000, kapasitas: 30 },
+  kios: { nama: 'Kios', biaya: 1000000, sewaBulan: 500000, kapasitas: 80 },
+  ruko: { nama: 'Ruko', biaya: 3000000, sewaBulan: 1500000, kapasitas: 200 }
+};
+var LOKASI = {
+  kampus: { nama: 'Dekat Kampus', tier: 'ramai', faktorTempat: 1.3, pengaliSewa: 2.0 },
+  pasar: { nama: 'Dekat Pasar', tier: 'ramai', faktorTempat: 1.3, pengaliSewa: 2.0 },
+  perumahan: { nama: 'Perumahan', tier: 'sedang', faktorTempat: 1.0, pengaliSewa: 1.3 },
+  pinggir: { nama: 'Pinggir Kota', tier: 'sepi', faktorTempat: 0.7, pengaliSewa: 1.0 }
+};
+var PERALATAN = {
+  sederhana: { nama: 'Sederhana', biaya: 100000, kapasitas: 20, mutu: 0 },
+  lengkap: { nama: 'Lengkap (+pendingin)', biaya: 500000, kapasitas: 60, mutu: 0.05 }
+};
+var IZIN = { nama: 'NIB + Sertifikat (PIRT / Laik Higiene)', biaya: 150000, hari: 3 };
+var OPSIONAL = {
+  promo: { nama: 'Promo Pembukaan', biaya: 100000, hari: 1, efek: 'Reputasi awal +0,10' },
+  platform: { nama: 'Daftar Platform Antar', biaya: 0, hari: 1, efek: 'Permintaan x1,15, pendapatan x0,85 (komisi)' },
+  halal: { nama: 'Sertifikat Halal', biaya: 200000, hari: 7, efek: 'Permintaan x1,10' }
+};
+// Musim kuliner per bulan (1-12), data sementara.
+var MUSIM = { 1: 1.0, 2: 0.95, 3: 1.0, 4: 1.05, 5: 1.0, 6: 1.1, 7: 1.0, 8: 1.0, 9: 0.95, 10: 1.0, 11: 1.05, 12: 1.15 };
+var PESAING = 5; // jumlah pesaing kuliner (data)
+var PAJAK_PERSEN = 0.005; // PPh final UMKM 0,5% dari omzet/bulan
+var DENDA_TELAT_PERSEN = 0.02; // denda 2% per hari keterlambatan kewajiban
+
+// ---------- STATE ----------
 function createState(seed) {
   return {
-    kas: MODAL_AWAL,
-    hari: 1,
-    tanggal: todayISO(),
-    seed: seed || Math.floor(Math.random() * 1000000000),
-    tokoBuka: false,
-    produkId: null,
-    bahan: {},
-    stok: 0,
-    harga: 0,
-    terjualHariIni: 0,
-    penjualanHariIni: 0,
-    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Lihat peluang, lalu pilih usaha yang mau dibuka.' }]
+    kas: MODAL_AWAL, hari: 1, tanggal: todayISO(), seed: seed || Math.floor(Math.random() * 1000000000),
+    fase: 'riset', // riset -> persiapan -> toko -> bangkrut | menang
+    riset: { lapis1: false, lapis2: false, lapis3: null }, // lapis3: null | {hariKe, hasil:[]}
+    siap: { tempat: null, lokasi: null, peralatan: null, izin: false, menu: [], supplier: {}, stokAwal: false, promo: false, platform: false, halal: false },
+    toko: null, // diisi saat buka usaha
+    praPinjaman: [], // pinjaman yang diambil sebelum toko buka, diubah jadi kewajiban saat buka
+    omzetBulan: 0, bulanBerjalan: null,
+    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Mulai dari riset pasar, lalu siapkan usahamu satu per satu.' }]
   };
 }
-
-function produkAktif(state) {
-  return state.produkId ? PRODUCTS[state.produkId] : null;
-}
-
 function pushLog(state, teks) {
   state.log.unshift({ hari: state.hari, teks: teks });
-  if (state.log.length > 50) state.log.length = 50;
+  if (state.log.length > 100) state.log.length = 100;
+}
+function inputDibutuhkan(state) {
+  var inputs = {};
+  state.siap.menu.forEach(function (pid) {
+    PRODUK[pid].bahan.forEach(function (b) { inputs[b.id] = true; });
+  });
+  return Object.keys(inputs);
+}
+function biayaTetapHarian(state) {
+  if (!state.toko) return 0;
+  return Math.round(state.toko.sewaBulan / 30);
+}
+function runwayHari(state) {
+  var tetap = biayaTetapHarian(state);
+  if (tetap <= 0) return 999;
+  return Math.max(0, Math.floor(state.kas / tetap));
 }
 
-function pilihUsaha(state, produkId) {
-  var p = PRODUCTS[produkId];
-  if (!p) return { ok: false, msg: 'Produk tidak dikenal.' };
-  if (state.tokoBuka) return { ok: false, msg: 'Usaha sudah dibuka.' };
-  state.produkId = produkId;
-  state.tokoBuka = true;
-  state.harga = p.hargaAcuan;
-  state.bahan = {};
-  p.bahan.forEach(function (b) { state.bahan[b.id] = 0; });
-  pushLog(state, 'Membuka usaha ' + p.nama + ' dengan modal ' + fmtRp(state.kas) + '.');
-  return { ok: true, msg: 'Membuka usaha ' + p.nama + '.' };
+// ---------- RISET (3 lapis) ----------
+function risetLapis1(state) {
+  if (state.riset.lapis1) return { ok: false, msg: 'Gambaran kasar sudah dilihat.' };
+  state.riset.lapis1 = true;
+  pushLog(state, 'Riset kasar: kuliner butuh modal masuk sekitar Rp 400rb–3jt, harga jual Rp 10rb–15rb, sinyal: ramai.');
+  return { ok: true, msg: 'Gambaran kasar didapat (gratis).' };
 }
-
-function beliBahan(state, bahanId, qty) {
-  var p = produkAktif(state);
-  if (!p) return { ok: false, msg: 'Buka usaha dulu sebelum beli bahan.' };
-  var bahan = null;
-  p.bahan.forEach(function (b) { if (b.id === bahanId) bahan = b; });
-  if (!bahan) return { ok: false, msg: 'Bahan tidak dikenal.' };
-  var biaya = bahan.harga * qty;
-  if (state.kas < biaya) return { ok: false, msg: 'Kas tidak cukup untuk beli ' + qty + ' ' + bahan.nama + ' (' + fmtRp(biaya) + ').' };
+function risetLapis2(state) {
+  if (!state.riset.lapis1) return { ok: false, msg: 'Lihat gambaran kasar dulu.' };
+  if (state.riset.lapis2) return { ok: false, msg: 'Laporan detail sudah didapat.' };
+  var biaya = 50000, hari = 2;
+  if (state.kas < biaya) return { ok: false, msg: 'Kas tidak cukup untuk laporan detail (' + fmtRp(biaya) + ').' };
   state.kas -= biaya;
-  state.bahan[bahanId] += qty;
-  pushLog(state, 'Beli ' + qty + ' ' + bahan.nama + ' seharga ' + fmtRp(biaya) + '.');
-  return { ok: true, msg: 'Beli ' + qty + ' ' + bahan.nama + '.' };
+  state.tanggal = addDays(state.tanggal, hari);
+  state.hari += hari;
+  state.riset.lapis2 = true;
+  pushLog(state, 'Laporan detail dibeli (' + fmtRp(biaya) + ', ' + hari + ' hari): rincian modal, harga pasar, ' + PESAING + ' pesaing, cara jualan umum, daftar persiapan.');
+  return { ok: true, msg: 'Laporan detail didapat.' };
 }
-
-function produksi(state, qty) {
-  var p = produkAktif(state);
-  if (!p) return { ok: false, msg: 'Buka usaha dulu sebelum produksi.' };
-  for (var i = 0; i < p.bahan.length; i++) {
-    if (state.bahan[p.bahan[i].id] < qty) {
-      return { ok: false, msg: 'Bahan tidak cukup untuk produksi ' + qty + ' ' + p.nama + '.' };
-    }
+function risetLapis3(state) {
+  if (!state.riset.lapis2) return { ok: false, msg: 'Beli laporan detail dulu.' };
+  if (state.riset.lapis3) return { ok: false, msg: 'Uji pasar sudah dilakukan.' };
+  var modalUji = 100000;
+  if (state.kas < modalUji) return { ok: false, msg: 'Kas tidak cukup untuk uji pasar (' + fmtRp(modalUji) + ').' };
+  state.kas -= modalUji;
+  // Uji pasar: 3 hari jualan percobaan dengan rumus permintaan yang sama.
+  var hasil = [];
+  for (var i = 0; i < 3; i++) {
+    var rng = mulberry32(state.seed + 999 + i * 131);
+    var permintaan = Math.round(20 * (0.8 + rng() * 0.4));
+    var terjual = Math.min(permintaan, 15); // stok percobaan terbatas
+    hasil.push({ hari: i + 1, permintaan: permintaan, terjual: terjual });
   }
-  p.bahan.forEach(function (b) { state.bahan[b.id] -= qty; });
-  state.stok += qty;
-  pushLog(state, 'Produksi ' + qty + ' ' + p.nama + '.');
-  return { ok: true, msg: 'Produksi ' + qty + ' ' + p.nama + '.' };
+  state.tanggal = addDays(state.tanggal, 3);
+  state.hari += 3;
+  state.riset.lapis3 = { hasil: hasil };
+  pushLog(state, 'Uji pasar selesai (modal ' + fmtRp(modalUji) + ', 3 hari): data penjualan beneran dari simulasi.');
+  return { ok: true, msg: 'Uji pasar selesai.' };
 }
 
-function aturHarga(state, nilai) {
-  if (!produkAktif(state)) return { ok: false, msg: 'Buka usaha dulu.' };
+// ---------- PERSIAPAN ----------
+function persiapanBeli(state, jenis, id) {
+  if (state.fase !== 'persiapan' && state.fase !== 'riset') return { ok: false, msg: 'Bukan fase persiapan.' };
+  if (state.fase === 'riset') state.fase = 'persiapan';
+  var s = state.siap;
+  if (jenis === 'tempat') {
+    if (s.tempat) return { ok: false, msg: 'Tempat sudah dipilih.' };
+    var t = TEMPAT[id]; if (!t) return { ok: false, msg: 'Tempat tidak dikenal.' };
+    if (state.kas < t.biaya) return { ok: false, msg: 'Kas tidak cukup (' + fmtRp(t.biaya) + '). Pertimbangkan pinjaman.' };
+    state.kas -= t.biaya; s.tempat = id;
+    pushLog(state, 'Tempat dipilih: ' + t.nama + ' (' + fmtRp(t.biaya) + ').');
+  } else if (jenis === 'lokasi') {
+    if (s.lokasi) return { ok: false, msg: 'Lokasi sudah dipilih.' };
+    var l = LOKASI[id]; if (!l) return { ok: false, msg: 'Lokasi tidak dikenal.' };
+    s.lokasi = id; // lokasi tidak berbayar sendiri; biayanya lewat pengali sewa
+    pushLog(state, 'Lokasi dipilih: ' + l.nama + ' (tier ' + l.tier + ').');
+  } else if (jenis === 'peralatan') {
+    if (!s.tempat) return { ok: false, msg: 'Pilih tempat dulu (prasyarat).' };
+    if (s.peralatan) return { ok: false, msg: 'Peralatan sudah dibeli.' };
+    var p = PERALATAN[id]; if (!p) return { ok: false, msg: 'Peralatan tidak dikenal.' };
+    if (state.kas < p.biaya) return { ok: false, msg: 'Kas tidak cukup (' + fmtRp(p.biaya) + ').' };
+    state.kas -= p.biaya; s.peralatan = id;
+    pushLog(state, 'Peralatan dibeli: ' + p.nama + ' (' + fmtRp(p.biaya) + ').');
+  } else if (jenis === 'izin') {
+    if (s.izin) return { ok: false, msg: 'Izin sudah diurus.' };
+    if (state.kas < IZIN.biaya) return { ok: false, msg: 'Kas tidak cukup (' + fmtRp(IZIN.biaya) + ').' };
+    state.kas -= IZIN.biaya; state.tanggal = addDays(state.tanggal, IZIN.hari); state.hari += IZIN.hari; s.izin = true;
+    pushLog(state, 'Izin diurus: ' + IZIN.nama + ' (' + fmtRp(IZIN.biaya) + ', ' + IZIN.hari + ' hari).');
+  } else if (jenis === 'menu') {
+    if (s.menu.indexOf(id) >= 0) return { ok: false, msg: 'Produk sudah ada di menu.' };
+    if (!PRODUK[id]) return { ok: false, msg: 'Produk tidak dikenal.' };
+    s.menu.push(id);
+    pushLog(state, 'Menu ditambah: ' + PRODUK[id].nama + '.');
+  } else if (jenis === 'supplier') {
+    // id = "inputId:arkeId"
+    var parts = id.split(':');
+    if (s.menu.length === 0) return { ok: false, msg: 'Pilih menu dulu (prasyarat).' };
+    if (inputDibutuhkan(state).indexOf(parts[0]) < 0) return { ok: false, msg: 'Input itu tidak dibutuhkan menu saat ini.' };
+    s.supplier[parts[0]] = parts[1];
+    pushLog(state, 'Supplier dipilih: ' + INPUT_NAMA[parts[0]] + ' dari ' + supplierInfo(parts[0], parts[1]).nama + '.');
+  } else if (jenis === 'stokAwal') {
+    if (s.stokAwal) return { ok: false, msg: 'Stok awal sudah dibeli.' };
+    var butuh = inputDibutuhkan(state);
+    for (var i = 0; i < butuh.length; i++) if (!s.supplier[butuh[i]]) return { ok: false, msg: 'Pilih supplier untuk ' + INPUT_NAMA[butuh[i]] + ' dulu (prasyarat).' };
+    s.stokAwal = true; // bahan awal dibeli saat buka usaha (lihat bukaUsaha)
+    pushLog(state, 'Stok awal disiapkan (dibeli saat buka usaha).');
+  } else if (jenis === 'opsional') {
+    if (s[id]) return { ok: false, msg: 'Sudah diambil.' };
+    var o = OPSIONAL[id]; if (!o) return { ok: false, msg: 'Opsi tidak dikenal.' };
+    if (state.kas < o.biaya) return { ok: false, msg: 'Kas tidak cukup (' + fmtRp(o.biaya) + ').' };
+    state.kas -= o.biaya; state.tanggal = addDays(state.tanggal, o.hari); state.hari += o.hari; s[id] = true;
+    pushLog(state, 'Opsional diambil: ' + o.nama + ' (' + fmtRp(o.biaya) + ', ' + o.hari + ' hari).');
+  } else {
+    return { ok: false, msg: 'Jenis persiapan tidak dikenal.' };
+  }
+  return { ok: true, msg: 'Persiapan dicatat.' };
+}
+function persiapanWajibLengkap(state) {
+  var s = state.siap;
+  var butuh = inputDibutuhkan(state);
+  var supplierLengkap = butuh.length > 0 && butuh.every(function (inp) { return !!s.supplier[inp]; });
+  return !!(s.tempat && s.lokasi && s.peralatan && s.izin && s.menu.length > 0 && supplierLengkap && s.stokAwal);
+}
+function bukaUsaha(state) {
+  if (!persiapanWajibLengkap(state)) return { ok: false, msg: 'Persiapan wajib belum lengkap.' };
+  var s = state.siap;
+  // Stok awal: 5 unit bahan per input (dihitung dulu, dicek dulu, baru toko dibuat).
+  var totalAwal = 0;
+  inputDibutuhkan(state).forEach(function (inp) {
+    totalAwal += supplierInfo(inp, s.supplier[inp]).harga * 5;
+  });
+  if (state.kas < totalAwal) return { ok: false, msg: 'Kas tidak cukup untuk stok awal (' + fmtRp(totalAwal) + '). Ambil pinjaman dulu atau kurangi menu.' };
+  var sewaBulan = Math.round(TEMPAT[s.tempat].sewaBulan * LOKASI[s.lokasi].pengaliSewa);
+  var reputasi = 1.0 + (s.promo ? 0.10 : 0) + PERALATAN[s.peralatan].mutu;
+  state.toko = {
+    bidang: 'kuliner', tempat: s.tempat, lokasi: s.lokasi, peralatan: s.peralatan,
+    sewaBulan: sewaBulan, reputasi: reputasi,
+    stok: {}, bahan: {}, harga: {}, pesanan: [], kewajiban: [],
+    hubungan: {}, // supplierKey -> level 0..5
+    platform: !!s.platform, halal: !!s.halal,
+    kapasitas: Math.min(TEMPAT[s.tempat].kapasitas, PERALATAN[s.peralatan].kapasitas),
+    produksiHariIni: 0
+  };
+  s.menu.forEach(function (pid) {
+    state.toko.stok[pid] = 0;
+    state.toko.harga[pid] = PRODUK[pid].hargaAcuan;
+  });
+  inputDibutuhkan(state).forEach(function (inp) { state.toko.bahan[inp] = 0; });
+  // Stok awal: beli 5 unit bahan per input dari supplier terpilih (tunai).
+  inputDibutuhkan(state).forEach(function (inp) {
+    state.toko.bahan[inp] += 5;
+  });
+  state.kas -= totalAwal;
+  // Pinjaman pra-toko diubah jadi kewajiban toko.
+  state.praPinjaman.forEach(function (kw) { state.toko.kewajiban.push(kw); });
+  state.praPinjaman = [];
+  // Kewajiban sewa pertama jatuh tempo 30 hari lagi; pajak dihitung tiap akhir bulan.
+  state.toko.kewajiban.push({ id: 'sewa-' + state.hari, jenis: 'Sewa tempat', jumlah: sewaBulan, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0 });
+  state.bulanBerjalan = state.tanggal.slice(0, 7);
+  state.omzetBulan = 0;
+  state.fase = 'toko';
+  pushLog(state, 'Usaha dibuka! Sewa ' + fmtRp(sewaBulan) + '/bulan, kapasitas ' + state.toko.kapasitas + ' unit/hari, reputasi awal ' + reputasi.toFixed(2) + '.');
+  return { ok: true, msg: 'Usaha dibuka!' };
+}
+
+// ---------- PINJAMAN ----------
+function ambilPinjaman(state, jenis) {
+  if (state.fase !== 'toko' && state.fase !== 'persiapan') return { ok: false, msg: 'Pinjaman belum bisa diambil.' };
+  var adaTunggakan = state.toko && state.toko.kewajiban.some(function (k) { return !k.dibayar && k.jatuhTempo < state.tanggal; });
+  if (jenis === 'normal') {
+    if (state.kas < 0) return { ok: false, msg: 'Pinjaman murah tertutup saat kas negatif (lapis bangkrut 1).' };
+    var jumlah = 2000000, bunga = 0.10, tempo = 30;
+    state.kas += jumlah;
+    var kwNormal = { id: 'pinj-' + state.hari, jenis: 'Pinjaman normal', jumlah: Math.round(jumlah * (1 + bunga)), jatuhTempo: addDays(state.tanggal, tempo), dibayar: false, denda: 0 };
+    if (state.toko) state.toko.kewajiban.push(kwNormal); else state.praPinjaman.push(kwNormal);
+    pushLog(state, 'Pinjaman normal: ' + fmtRp(jumlah) + ', bunga 10%, tempo 30 hari.');
+  } else if (jenis === 'darurat') {
+    if (state.kas >= 0 && !adaTunggakan) return { ok: false, msg: 'Pinjaman darurat hanya saat kas negatif atau ada tunggakan.' };
+    var j2 = 1000000, b2 = 0.25, t2 = 14;
+    state.kas += j2;
+    var kwDarurat = { id: 'darurat-' + state.hari, jenis: 'Pinjaman darurat', jumlah: Math.round(j2 * (1 + b2)), jatuhTempo: addDays(state.tanggal, t2), dibayar: false, denda: 0 };
+    if (state.toko) state.toko.kewajiban.push(kwDarurat); else state.praPinjaman.push(kwDarurat);
+    pushLog(state, 'Pinjaman DARURAT: ' + fmtRp(j2) + ', bunga 25%, tempo 14 hari.');
+  } else return { ok: false, msg: 'Jenis pinjaman tidak dikenal.' };
+  return { ok: true, msg: 'Pinjaman cair.' };
+}
+function jualPeralatan(state) {
+  if (!state.toko) return { ok: false, msg: 'Belum ada toko.' };
+  if (state.toko.peralatanTerjual) return { ok: false, msg: 'Peralatan sudah dijual.' };
+  var nilai = Math.round(PERALATAN[state.toko.peralatan].biaya * 0.5);
+  state.kas += nilai;
+  state.toko.peralatanTerjual = true;
+  state.toko.kapasitas = 10; // tanpa peralatan, kapasitas tinggal tenaga sendiri
+  pushLog(state, 'Peralatan dijual rugi: +' + fmtRp(nilai) + '. Kapasitas turun ke 10 unit/hari.');
+  return { ok: true, msg: 'Peralatan dijual.' };
+}
+
+// ---------- BELI, PRODUKSI, HARGA ----------
+function beliBahan(state, inputId, arkeId, qty, cara) {
+  var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
+  if (state.kas < 0 && cara === 'tempo') return { ok: false, msg: 'Kas negatif: supplier minta tunai (lapis bangkrut 1).' };
+  var info = supplierInfo(inputId, arkeId);
+  var key = supplierKey(inputId, arkeId);
+  var level = t.hubungan[key] || 0;
+  var diskon = level * 0.01;
+  var hargaSatuan = Math.round(info.harga * (1 - diskon));
+  var biaya = hargaSatuan * qty;
+  var rng = mulberry32(state.seed + state.hari * 31 + inputId.length);
+  var telat = rng() > info.andal ? 1 : 0; // supplier kurang andal bisa telat 1 hari
+  var tiba = addDays(state.tanggal, info.kirimHari + telat);
+  if (cara === 'tunai') {
+    if (state.kas < biaya) return { ok: false, msg: 'Kas tidak cukup (' + fmtRp(biaya) + ').' };
+    state.kas -= biaya;
+    t.pesanan.push({ inputId: inputId, qty: qty, tiba: tiba, lunas: true });
+    pushLog(state, 'Beli ' + qty + ' ' + INPUT_NAMA[inputId] + ' dari ' + info.nama + ' tunai ' + fmtRp(biaya) + ', tiba ' + tiba + (telat ? ' (telat 1 hari)' : '') + '.');
+  } else {
+    var tempo = info.tempoHari + level;
+    if (tempo <= 0) return { ok: false, msg: 'Supplier ini hanya melayani tunai.' };
+    t.pesanan.push({ inputId: inputId, qty: qty, tiba: tiba, lunas: false });
+    t.kewajiban.push({ id: 'sup-' + state.hari + '-' + inputId, jenis: 'Tempo supplier ' + INPUT_NAMA[inputId], jumlah: biaya, jatuhTempo: addDays(state.tanggal, tempo), dibayar: false, denda: 0, supplierKey: key });
+    pushLog(state, 'Beli ' + qty + ' ' + INPUT_NAMA[inputId] + ' dari ' + info.nama + ' tempo ' + fmtRp(biaya) + ', jatuh tempo ' + addDays(state.tanggal, tempo) + '.');
+  }
+  return { ok: true, msg: 'Pesanan dicatat.' };
+}
+function produksi(state, produkId, qty) {
+  var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
+  if (state.siap.menu.indexOf(produkId) < 0) return { ok: false, msg: 'Produk tidak ada di menu.' };
+  if (t.produksiHariIni + qty > t.kapasitas) return { ok: false, msg: 'Melebihi kapasitas hari ini (' + t.kapasitas + ' unit).' };
+  var p = PRODUK[produkId];
+  for (var i = 0; i < p.bahan.length; i++) if ((t.bahan[p.bahan[i].id] || 0) < qty) return { ok: false, msg: 'Bahan tidak cukup: ' + p.bahan[i].nama + '.' };
+  p.bahan.forEach(function (b) { t.bahan[b.id] -= qty; });
+  t.stok[produkId] += qty;
+  t.produksiHariIni += qty;
+  pushLog(state, 'Produksi ' + qty + ' ' + p.nama + '.');
+  return { ok: true, msg: 'Produksi jalan.' };
+}
+function aturHarga(state, produkId, nilai) {
+  var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
   if (!nilai || nilai < 1000) return { ok: false, msg: 'Harga minimal Rp 1.000.' };
-  state.harga = Math.round(nilai);
-  pushLog(state, 'Harga jual diubah menjadi ' + fmtRp(state.harga) + ' per unit.');
+  t.harga[produkId] = Math.round(nilai);
+  pushLog(state, 'Harga ' + PRODUK[produkId].nama + ' diubah ke ' + fmtRp(t.harga[produkId]) + '.');
   return { ok: true, msg: 'Harga diubah.' };
 }
-
-function hariBerikutnya(state) {
-  var p = produkAktif(state);
-  if (!p) return { ok: false, msg: 'Buka usaha dulu.' };
-  var rng = mulberry32(state.seed + state.hari * 7919);
-  var permintaan = Math.round(p.permintaanDasar * (p.hargaAcuan / state.harga) * (0.8 + rng() * 0.4));
-  if (permintaan < 0) permintaan = 0;
-  var terjual = Math.min(permintaan, state.stok);
-  var pendapatan = terjual * state.harga;
-  state.stok -= terjual;
-  state.kas += pendapatan;
-  state.terjualHariIni = terjual;
-  state.penjualanHariIni = pendapatan;
-  state.tanggal = nextISO(state.tanggal);
-  state.hari += 1;
-  if (terjual < permintaan) {
-    pushLog(state, 'Hari ' + (state.hari - 1) + ': permintaan ' + permintaan + ' tapi stok habis setelah ' + terjual + ' terjual. Pendapatan ' + fmtRp(pendapatan) + '.');
-  } else {
-    pushLog(state, 'Hari ' + (state.hari - 1) + ': terjual ' + terjual + ' ' + p.nama.toLowerCase() + ', pendapatan ' + fmtRp(pendapatan) + '.');
+function bayarKewajiban(state, kewajibanId) {
+  var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
+  var k = null;
+  t.kewajiban.forEach(function (x) { if (x.id === kewajibanId) k = x; });
+  if (!k || k.dibayar) return { ok: false, msg: 'Kewajiban tidak ditemukan / sudah dibayar.' };
+  var total = k.jumlah + k.denda;
+  if (state.kas < total) return { ok: false, msg: 'Kas tidak cukup (' + fmtRp(total) + ').' };
+  state.kas -= total;
+  k.dibayar = true;
+  if (k.supplierKey) {
+    t.hubungan[k.supplierKey] = Math.min(5, (t.hubungan[k.supplierKey] || 0) + 1);
+    pushLog(state, 'Tempo supplier dibayar tepat waktu. Hubungan membaik (level ' + t.hubungan[k.supplierKey] + ').');
   }
-  if (state.kas < 0) pushLog(state, 'PERINGATAN: kas negatif (' + fmtRp(state.kas) + '). Aturan bangkrut lengkap (30 hari) menyusul di tahap berikutnya.');
-  return { ok: true, terjual: terjual, pendapatan: pendapatan };
+  pushLog(state, 'Kewajiban dibayar: ' + k.jenis + ' ' + fmtRp(total) + '.');
+  return { ok: true, msg: 'Dibayar.' };
+}
+
+// ---------- SIMULASI HARIAN ----------
+function faktorHarga(hargaAcuan, hargaEfektif) {
+  var f = hargaAcuan / hargaEfektif;
+  if (f < 0.3) f = 0.3;
+  if (f > 2.0) f = 2.0;
+  return f;
+}
+function jalankanHari(state, diskonPersen) {
+  var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
+  diskonPersen = diskonPersen || 0;
+  // Pagi: pesanan tiba.
+  var tibaHariIni = [];
+  t.pesanan = t.pesanan.filter(function (ps) {
+    if (ps.tiba <= state.tanggal) { t.bahan[ps.inputId] = (t.bahan[ps.inputId] || 0) + ps.qty; tibaHariIni.push(ps); return false; }
+    return true;
+  });
+  if (tibaHariIni.length) pushLog(state, 'Pesanan tiba: ' + tibaHariIni.map(function (ps) { return ps.qty + ' ' + INPUT_NAMA[ps.inputId].toLowerCase(); }).join(', ') + '.');
+  // Siang: permintaan & penjualan per produk.
+  var rng = mulberry32(state.seed + state.hari * 7919);
+  var musim = MUSIM[monthOf(state.tanggal)] || 1.0;
+  var faktorPesaing = Math.max(0.5, 1 - 0.03 * PESAING);
+  var faktorTempat = LOKASI[t.lokasi].faktorTempat;
+  var laporan = [];
+  var pendapatan = 0;
+  state.siap.menu.forEach(function (pid) {
+    var p = PRODUK[pid];
+    var hargaEfektif = Math.round(t.harga[pid] * (1 - diskonPersen / 100));
+    var permintaan = Math.round(p.permintaanDasar * faktorHarga(p.hargaAcuan, hargaEfektif) * t.reputasi * musim * faktorPesaing * 1.0 * faktorTempat * (0.8 + rng() * 0.4));
+    if (t.platform) permintaan = Math.round(permintaan * 1.15);
+    if (t.halal) permintaan = Math.round(permintaan * 1.10);
+    if (permintaan < 0) permintaan = 0;
+    var terjual = Math.min(permintaan, t.stok[pid]);
+    var hasil = terjual * hargaEfektif;
+    if (t.platform) hasil = Math.round(hasil * 0.85); // komisi platform
+    t.stok[pid] -= terjual;
+    pendapatan += hasil;
+    laporan.push({ produk: p.nama, permintaan: permintaan, terjual: terjual, pendapatan: hasil });
+    if (terjual > 0) t.reputasi = Math.min(1.5, t.reputasi + 0.005);
+  });
+  state.kas += pendapatan;
+  state.omzetBulan += pendapatan;
+  // Malam: kewajiban jatuh tempo -> denda & konsekuensi lapis 2.
+  var jatuhTempo = [];
+  t.kewajiban.forEach(function (k) {
+    if (!k.dibayar && k.jatuhTempo <= state.tanggal) {
+      k.denda = Math.round(k.jumlah * DENDA_TELAT_PERSEN);
+      jatuhTempo.push(k);
+      if (k.supplierKey) {
+        t.hubungan[k.supplierKey] = 0;
+        t.reputasi = Math.max(0.5, t.reputasi - 0.05);
+        pushLog(state, 'Tempo supplier ' + k.jenis + ' MENUNGGAK. Supplier berhenti melayani, reputasi turun.');
+      }
+    }
+  });
+  // Pajak bulanan: tiap ganti bulan, tagih 0,5% omzet bulan lalu.
+  var bulanIni = state.tanggal.slice(0, 7);
+  if (state.bulanBerjalan && bulanIni !== state.bulanBerjalan) {
+    var pajak = Math.round(state.omzetBulan * PAJAK_PERSEN);
+    if (pajak > 0) {
+      t.kewajiban.push({ id: 'pajak-' + state.tanggal, jenis: 'PPh final UMKM 0,5%', jumlah: pajak, jatuhTempo: addDays(state.tanggal, 15), dibayar: false, denda: 0 });
+      pushLog(state, 'Pajak bulan lalu: ' + fmtRp(pajak) + ' (0,5% dari omzet ' + fmtRp(state.omzetBulan) + ').');
+    }
+    state.omzetBulan = 0;
+    state.bulanBerjalan = bulanIni;
+    // Sewa bulan berikutnya.
+    t.kewajiban.push({ id: 'sewa-' + state.tanggal, jenis: 'Sewa tempat', jumlah: t.sewaBulan, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0 });
+  }
+  // Vonis bangkrut lapis 3: kas negatif + tunggakan melewati tenggat + tidak ada aset + tidak ada pinjaman.
+  var tunggakanLama = t.kewajiban.filter(function (k) { return !k.dibayar && addDays(k.jatuhTempo, 30) < state.tanggal; });
+  var nilaiAset = 0;
+  Object.keys(t.stok).forEach(function (pid) { nilaiAset += t.stok[pid] * PRODUK[pid].hargaAcuan; });
+  if (!t.peralatanTerjual) nilaiAset += Math.round(PERALATAN[t.peralatan].biaya * 0.5);
+  if (state.kas < 0 && tunggakanLama.length > 0 && nilaiAset <= 0) {
+    state.fase = 'bangkrut';
+    pushLog(state, 'VONIS BANGKRUT: kas negatif, tunggakan melewati tenggat, tidak ada aset bisa dijual, tidak ada pinjaman bisa diakses.');
+    return { ok: true, laporan: laporan, pendapatan: pendapatan, bangkrut: true };
+  }
+  // Menang: total aset >= Rp50 miliar.
+  var totalAset = state.kas + nilaiAset;
+  if (totalAset >= TARGET_MENANG) {
+    state.fase = 'menang';
+    pushLog(state, 'MENANG: total aset mencapai ' + fmtRp(totalAset) + '. Kamu konglomerat!');
+    return { ok: true, laporan: laporan, pendapatan: pendapatan, menang: true };
+  }
+  state.tanggal = addDays(state.tanggal, 1);
+  state.hari += 1;
+  t.produksiHariIni = 0;
+  if (state.kas < 0) pushLog(state, 'PERINGATAN lapis 1: kas negatif (' + fmtRp(state.kas) + '). Tidak bisa beli stok baru, supplier minta tunai, pinjaman murah tertutup.');
+  return { ok: true, laporan: laporan, pendapatan: pendapatan, jatuhTempo: jatuhTempo.map(function (k) { return k.jenis; }) };
 }
 
 // ---- UI (browser saja; logika di atas bisa dites dari Node) ----
 if (typeof document !== 'undefined') {
   var state = null;
-
   function muat() {
     try {
       var raw = localStorage.getItem(SAVE_KEY);
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        if (parsed && typeof parsed.tokoBuka !== 'undefined' && parsed.produkId !== undefined) {
-          state = parsed;
-          return;
-        }
-      }
-    } catch (e) { /* abaikan, mulai baru */ }
+      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; return; } }
+    } catch (e) { /* abaikan */ }
     state = createState();
   }
-
-  function simpan() {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* abaikan */ }
-  }
-
+  function simpan() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* abaikan */ } }
   function el(id) { return document.getElementById(id); }
+  function aksi(fn) { var r = fn(); if (!r.ok) alert(r.msg); simpan(); render(); return r; }
 
-  function renderPilihan() {
-    var html = '';
-    Object.keys(PRODUCTS).forEach(function (id) {
-      var p = PRODUCTS[id];
-      var bahanTxt = p.bahan.map(function (b) { return b.nama + ' ' + fmtRp(b.harga); }).join(' + ');
-      html += '<div class="produk-card">' +
-        '<div class="produk-nama">' + p.nama + '</div>' +
-        '<div class="produk-info">Bahan: ' + bahanTxt + '</div>' +
-        '<div class="produk-info">Harga acuan: ' + fmtRp(p.hargaAcuan) + '</div>' +
-        '<div class="produk-info">Sinyal permintaan: <strong>' + sinyalPermintaan(p.permintaanDasar) + '</strong></div>' +
-        '<button class="btn btn-primary" data-produk="' + id + '">Buka Usaha Ini</button>' +
-        '</div>';
-    });
-    el('daftar-produk').innerHTML = html;
-    var btns = el('daftar-produk').querySelectorAll('button[data-produk]');
-    btns.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var r = pilihUsaha(state, btn.getAttribute('data-produk'));
-        if (!r.ok) alert(r.msg);
-        simpan();
-        render();
-      });
-    });
-  }
-
-  function renderAksiBeli() {
-    var p = produkAktif(state);
-    if (!p) return;
-    var html = '';
-    p.bahan.forEach(function (b) {
-      html += '<button class="btn btn-blue" data-bahan="' + b.id + '">Beli 10 ' + b.nama + ' (' + fmtRp(b.harga * 10) + ')</button>';
-    });
-    el('aksi-beli').innerHTML = html;
-    el('aksi-beli').querySelectorAll('button[data-bahan]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        aksi(function () { return beliBahan(state, btn.getAttribute('data-bahan'), 10); });
-      });
-    });
-    el('btn-produksi').textContent = 'Produksi 10 ' + p.nama;
-  }
-
-  function render() {
-    var p = produkAktif(state);
+  function renderHeader() {
     el('kas').textContent = fmtRp(state.kas);
     el('tanggal').textContent = state.tanggal;
     el('hari').textContent = state.hari;
-    el('layar-pilih').style.display = state.tokoBuka ? 'none' : 'block';
-    el('layar-toko').style.display = state.tokoBuka ? 'block' : 'none';
-    if (!state.tokoBuka) {
-      renderPilihan();
-      el('brand-sub').textContent = 'Pilih usahamu dulu';
-    } else {
-      el('brand-sub').textContent = p.nama + ' \u00B7 Tahap 1: Irisan Vertikal';
-      renderAksiBeli();
-      el('penjualan-hari-ini').textContent = fmtRp(state.penjualanHariIni);
-      el('terjual-hari-ini').textContent = state.terjualHariIni + ' unit terjual';
-      el('stok-produk').textContent = state.stok + ' unit';
-      el('bahan-ringkas').textContent = p.bahan.map(function (b) { return state.bahan[b.id] + ' ' + b.nama.toLowerCase(); }).join(' \u00B7 ');
-      el('tabel-produk').textContent = p.nama;
-      el('tabel-stok').textContent = state.stok;
-      el('tabel-harga').textContent = fmtRp(state.harga);
-      el('tabel-terjual').textContent = state.terjualHariIni;
-      el('harga-jual').value = state.harga;
-    }
-    el('log').innerHTML = state.log.map(function (e) {
-      return '<li>Hari ' + e.hari + ': ' + e.teks + '</li>';
+    el('runway').textContent = state.toko ? runwayHari(state) + ' hari' : '-';
+    if (state.kas < 0) el('kas').style.color = '#DC2626'; else el('kas').style.color = '';
+  }
+  function renderLog() {
+    el('log').innerHTML = state.log.map(function (e) { return '<li>Hari ' + e.hari + ': ' + e.teks + '</li>'; }).join('');
+  }
+  function renderRiset() {
+    var html = '';
+    if (state.riset.lapis1) html += '<p><strong>Gambaran kasar (gratis):</strong> kuliner butuh modal masuk sekitar Rp 400rb–3jt, harga jual Rp 10rb–15rb, sinyal: ramai.</p>';
+    if (state.riset.lapis2) html += '<p><strong>Laporan detail:</strong> rincian modal (sewa, alat, stok awal, izin), harga pasar per produk, ' + PESAING + ' pesaing, cara jualan umum (langsung, platform antar), daftar persiapan.</p>';
+    if (state.riset.lapis3) html += '<p><strong>Uji pasar (3 hari):</strong> ' + state.riset.lapis3.hasil.map(function (h) { return 'hari ' + h.hari + ': minta ' + h.permintaan + ', laku ' + h.terjual; }).join(' | ') + '.</p>';
+    if (!html) html = '<p>Belum ada riset. Mulai dari gambaran kasar (gratis), lalu laporan detail, lalu uji pasar.</p>';
+    el('riset-info').innerHTML = html;
+  }
+  function btnList(containerId, items, onClick) {
+    var html = '';
+    items.forEach(function (it) {
+      html += '<button class="btn" data-id="' + it.id + '"' + (it.disabled ? ' disabled' : '') + '>' + it.label + '</button>';
+    });
+    el(containerId).innerHTML = html;
+    el(containerId).querySelectorAll('button[data-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { onClick(btn.getAttribute('data-id')); });
+    });
+  }
+  function renderPersiapan() {
+    var s = state.siap;
+    btnList('opsi-tempat', Object.keys(TEMPAT).map(function (id) {
+      return { id: id, label: TEMPAT[id].nama + ' (' + fmtRp(TEMPAT[id].biaya) + ')', disabled: !!s.tempat };
+    }), function (id) { aksi(function () { return persiapanBeli(state, 'tempat', id); }); });
+    btnList('opsi-lokasi', Object.keys(LOKASI).map(function (id) {
+      return { id: id, label: LOKASI[id].nama + ' (' + LOKASI[id].tier + ')', disabled: !!s.lokasi };
+    }), function (id) { aksi(function () { return persiapanBeli(state, 'lokasi', id); }); });
+    btnList('opsi-peralatan', Object.keys(PERALATAN).map(function (id) {
+      return { id: id, label: PERALATAN[id].nama + ' (' + fmtRp(PERALATAN[id].biaya) + ')', disabled: !!s.peralatan };
+    }), function (id) { aksi(function () { return persiapanBeli(state, 'peralatan', id); }); });
+    btnList('opsi-menu', Object.keys(PRODUK).map(function (id) {
+      return { id: id, label: PRODUK[id].nama, disabled: s.menu.indexOf(id) >= 0 };
+    }), function (id) { aksi(function () { return persiapanBeli(state, 'menu', id); }); });
+    // Supplier per input yang dibutuhkan menu.
+    var butuh = inputDibutuhkan(state);
+    var supHtml = '';
+    if (butuh.length === 0) supHtml = '<p>Pilih menu dulu.</p>';
+    else butuh.forEach(function (inp) {
+      supHtml += '<div><strong>' + INPUT_NAMA[inp] + ':</strong> ';
+      SUPPLIER_ARKE.forEach(function (a) {
+        var info = supplierInfo(inp, a.id);
+        var aktif = s.supplier[inp] === a.id;
+        supHtml += '<button class="btn' + (aktif ? ' btn-aktif' : '') + '" data-sup="' + inp + ':' + a.id + '">' + a.nama + ' (' + fmtRp(info.harga) + ', ' + info.kirimHari + ' hari, ' + (info.tempoHari ? 'tempo ' + info.tempoHari + ' hari' : 'tunai') + ')</button> ';
+      });
+      supHtml += '</div>';
+    });
+    el('supplier-area').innerHTML = supHtml;
+    el('supplier-area').querySelectorAll('button[data-sup]').forEach(function (btn) {
+      btn.addEventListener('click', function () { aksi(function () { return persiapanBeli(state, 'supplier', btn.getAttribute('data-sup')); }); });
+    });
+    btnList('opsi-opsional', Object.keys(OPSIONAL).map(function (id) {
+      return { id: id, label: OPSIONAL[id].nama + ' (' + fmtRp(OPSIONAL[id].biaya) + ') — ' + OPSIONAL[id].efek, disabled: !!s[id] };
+    }), function (id) { aksi(function () { return persiapanBeli(state, 'opsional', id); }); });
+    el('persiapan-status').textContent = 'Wajib: tempat ' + (s.tempat ? '✓' : '–') + ' | lokasi ' + (s.lokasi ? '✓' : '–') + ' | peralatan ' + (s.peralatan ? '✓' : '–') + ' | izin ' + (s.izin ? '✓' : '–') + ' | menu ' + (s.menu.length ? s.menu.map(function (m) { return PRODUK[m].nama; }).join(', ') : '–') + ' | supplier ' + (butuh.length && butuh.every(function (i) { return !!s.supplier[i]; }) ? '✓' : '–') + ' | stok awal ' + (s.stokAwal ? '✓' : '–');
+    el('btn-buka').disabled = !persiapanWajibLengkap(state);
+  }
+  function renderToko() {
+    var t = state.toko;
+    var info = 'Bidang: Kuliner | Tempat: ' + TEMPAT[t.tempat].nama + ' | Lokasi: ' + LOKASI[t.lokasi].nama + ' (' + LOKASI[t.lokasi].tier + ') | Sewa: ' + fmtRp(t.sewaBulan) + '/bulan | Reputasi: ' + t.reputasi.toFixed(2) + ' | Kapasitas: ' + t.kapasitas + ' unit/hari (produksi hari ini: ' + t.produksiHariIni + ')';
+    el('toko-info').textContent = info;
+    el('stok-info').textContent = state.siap.menu.map(function (pid) { return PRODUK[pid].nama + ': stok ' + t.stok[pid] + ', harga ' + fmtRp(t.harga[pid]); }).join(' | ');
+    el('bahan-info').textContent = Object.keys(t.bahan).map(function (inp) { return INPUT_NAMA[inp] + ': ' + t.bahan[inp]; }).join(' | ') || 'Belum ada bahan.';
+    // Beli: input + supplier.
+    var beliInput = el('beli-input');
+    var curInput = beliInput.value || inputDibutuhkan(state)[0];
+    beliInput.innerHTML = inputDibutuhkan(state).map(function (inp) { return '<option value="' + inp + '">' + INPUT_NAMA[inp] + '</option>'; }).join('');
+    if (curInput) beliInput.value = curInput;
+    var inp = beliInput.value;
+    el('beli-supplier').innerHTML = SUPPLIER_ARKE.map(function (a) {
+      var info = supplierInfo(inp, a.id);
+      var lvl = t.hubungan[supplierKey(inp, a.id)] || 0;
+      return '<option value="' + a.id + '">' + a.nama + ' (' + fmtRp(info.harga) + ', kirim ' + info.kirimHari + ' hari, ' + (info.tempoHari ? 'tempo ' + (info.tempoHari + lvl) + ' hari' : 'tunai') + (lvl ? ', hubungan lv' + lvl : '') + ')</option>';
     }).join('');
+    // Produksi + harga.
+    el('prod-produk').innerHTML = state.siap.menu.map(function (pid) { return '<option value="' + pid + '">' + PRODUK[pid].nama + '</option>'; }).join('');
+    var hargaHtml = '';
+    state.siap.menu.forEach(function (pid) {
+      hargaHtml += '<label>' + PRODUK[pid].nama + ' <input type="number" id="harga-' + pid + '" value="' + t.harga[pid] + '" min="1000"> </label>';
+    });
+    el('harga-area').innerHTML = hargaHtml;
+    // Kewajiban.
+    var kw = t.kewajiban.filter(function (k) { return !k.dibayar; });
+    if (!kw.length) el('kewajiban-list').innerHTML = '<p>Tidak ada kewajiban.</p>';
+    else el('kewajiban-list').innerHTML = kw.map(function (k) {
+      var telat = k.jatuhTempo < state.tanggal;
+      return '<div>' + k.jenis + ' — ' + fmtRp(k.jumlah + k.denda) + ' (jatuh tempo ' + k.jatuhTempo + (telat ? ', MENUNGGAK' : '') + ') <button class="btn" data-bayar="' + k.id + '">Bayar</button></div>';
+    }).join('');
+    el('kewajiban-list').querySelectorAll('button[data-bayar]').forEach(function (btn) {
+      btn.addEventListener('click', function () { aksi(function () { return bayarKewajiban(state, btn.getAttribute('data-bayar')); }); });
+    });
   }
-
-  function aksi(fn) {
-    var r = fn();
-    if (!r.ok) alert(r.msg);
-    simpan();
-    render();
+  function render() {
+    renderHeader();
+    el('layar-riset').style.display = state.fase === 'riset' || state.fase === 'persiapan' ? 'block' : 'none';
+    el('layar-persiapan').style.display = state.fase === 'persiapan' || state.fase === 'riset' ? 'block' : 'none';
+    el('layar-toko').style.display = state.fase === 'toko' ? 'block' : 'none';
+    el('layar-akhir').style.display = (state.fase === 'bangkrut' || state.fase === 'menang') ? 'block' : 'none';
+    if (state.fase === 'riset' || state.fase === 'persiapan') { renderRiset(); renderPersiapan(); }
+    if (state.fase === 'toko') renderToko();
+    if (state.fase === 'bangkrut') { el('akhir-judul').textContent = 'BANGKRUT'; el('akhir-isi').textContent = 'Usaha tutup. Kas ' + fmtRp(state.kas) + '. Lihat log untuk urutan kesalahanmu, lalu coba lagi dengan keputusan berbeda.'; }
+    if (state.fase === 'menang') { el('akhir-judul').textContent = 'MENANG — KONGLOMERAT!'; el('akhir-isi').textContent = 'Total aset mencapai ' + fmtRp(TARGET_MENANG) + '. Dari modal ' + fmtRp(MODAL_AWAL) + ' menjadi konglomerat!'; }
+    renderLog();
   }
-
   document.addEventListener('DOMContentLoaded', function () {
     muat();
-    el('btn-produksi').addEventListener('click', function () { aksi(function () { return produksi(state, 10); }); });
-    el('btn-harga').addEventListener('click', function () { aksi(function () { return aturHarga(state, parseInt(el('harga-jual').value, 10)); }); });
-    el('btn-hari').addEventListener('click', function () { aksi(function () { return hariBerikutnya(state); }); });
+    el('btn-riset1').addEventListener('click', function () { aksi(function () { return risetLapis1(state); }); });
+    el('btn-riset2').addEventListener('click', function () { aksi(function () { return risetLapis2(state); }); });
+    el('btn-riset3').addEventListener('click', function () { aksi(function () { return risetLapis3(state); }); });
+    el('btn-ke-persiapan').addEventListener('click', function () { aksi(function () { state.fase = 'persiapan'; pushLog(state, 'Masuk fase persiapan.'); return { ok: true }; }); });
+    el('btn-izin').addEventListener('click', function () { aksi(function () { return persiapanBeli(state, 'izin', 'x'); }); });
+    el('btn-stok-awal').addEventListener('click', function () { aksi(function () { return persiapanBeli(state, 'stokAwal', 'x'); }); });
+    el('btn-buka').addEventListener('click', function () { aksi(function () { return bukaUsaha(state); }); });
+    el('beli-input').addEventListener('change', function () { simpan(); render(); });
+    el('btn-beli').addEventListener('click', function () {
+      aksi(function () { return beliBahan(state, el('beli-input').value, el('beli-supplier').value, parseInt(el('beli-qty').value, 10) || 10, el('beli-cara').value); });
+    });
+    el('btn-produksi').addEventListener('click', function () {
+      aksi(function () { return produksi(state, el('prod-produk').value, parseInt(el('prod-qty').value, 10) || 10); });
+    });
+    el('btn-harga').addEventListener('click', function () {
+      aksi(function () {
+        var ok = true;
+        state.siap.menu.forEach(function (pid) {
+          var r = aturHarga(state, pid, parseInt(el('harga-' + pid).value, 10));
+          if (!r.ok) ok = false;
+        });
+        return { ok: ok, msg: ok ? 'Harga diubah.' : 'Ada harga tidak valid.' };
+      });
+    });
+    el('btn-hari').addEventListener('click', function () {
+      aksi(function () {
+        var r = jalankanHari(state, parseInt(el('promo-diskon').value, 10) || 0);
+        if (r.ok) {
+          var lap = r.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
+          el('laporan-hari-ini').textContent = 'Kemarin: ' + lap + ' | Total pendapatan: ' + fmtRp(r.pendapatan);
+        }
+        return r;
+      });
+    });
+    el('btn-pinj-normal').addEventListener('click', function () { aksi(function () { return ambilPinjaman(state, 'normal'); }); });
+    el('btn-pinj-darurat').addEventListener('click', function () { aksi(function () { return ambilPinjaman(state, 'darurat'); }); });
+    el('btn-jual-alat').addEventListener('click', function () { aksi(function () { return jualPeralatan(state); }); });
     el('btn-baru').addEventListener('click', function () {
-      if (confirm('Mulai usaha baru? Progres saat ini akan dihapus.')) {
-        state = createState();
-        simpan();
-        render();
-      }
+      if (confirm('Mulai dari awal? Progres saat ini akan dihapus.')) { state = createState(); simpan(); render(); }
     });
     render();
   });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { createState: createState, pilihUsaha: pilihUsaha, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, hariBerikutnya: hariBerikutnya, PRODUCTS: PRODUCTS, sinyalPermintaan: sinyalPermintaan, fmtRp: fmtRp };
+  module.exports = { createState: createState, risetLapis1: risetLapis1, risetLapis2: risetLapis2, risetLapis3: risetLapis3, persiapanBeli: persiapanBeli, persiapanWajibLengkap: persiapanWajibLengkap, bukaUsaha: bukaUsaha, ambilPinjaman: ambilPinjaman, jualPeralatan: jualPeralatan, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, bayarKewajiban: bayarKewajiban, jalankanHari: jalankanHari, runwayHari: runwayHari, PRODUK: PRODUK, TEMPAT: TEMPAT, LOKASI: LOKASI, PERALATAN: PERALATAN, SUPPLIER_ARKE: SUPPLIER_ARKE, fmtRp: fmtRp };
 }

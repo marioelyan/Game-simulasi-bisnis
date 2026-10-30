@@ -1,14 +1,24 @@
-# Simulasi Bisnis
+# Konglomerat
 
-Simulasi bisnis 2D klik-klik untuk umum: belajar bisnis dan menguji ide
-dengan uang palsu sebelum mempertaruhkan uang asli. Bukan game akademik.
+Simulasi bisnis web: mulai dari modal Rp500.000, merintis dari usaha kecil,
+dan menang saat total aset mencapai Rp50 miliar. Semua keputusan punya
+sebab-akibat; dibuat serealistik mungkin seperti bisnis sungguhan.
 
 ## Status
 
-Tahap 1: irisan vertikal. Alur awal: pemain mulai dengan modal Rp 500.000,
-melihat peluang, lalu MEMILIH usaha dari set awal yang dibatasi. Setelah
-usaha dibuka, loop beli bahan &rarr; produksi &rarr; jual berjalan.
-Judul game belum diputuskan.
+Tahap A: mesin inti + 1 bidang (kuliner). Alur: riset pasar 3 lapis →
+persiapan satu per satu (tempat, lokasi, peralatan, izin, menu, supplier,
+stok awal, opsional) → loop harian (cek pagi → keputusan → simulasi →
+laporan malam + kewajiban). Sistem yang jalan: rumus permintaan lengkap
+(dasar × harga × reputasi × musim × pesaing × tempat × noise ber-seed),
+supplier berkarakter (harga, kirim, tempo, keandalan, hubungan),
+bangkrut 3 lapis + jalan keluar darurat, pajak fondasi (PPh final 0,5%
+omzet/bulan), pinjaman normal & darurat, menang/kalah.
+
+Belum ada (tahap berikutnya): karyawan (Tahap B), event (Tahap B),
+39 bidang sisanya (Tahap C), holding (Tahap D), visual final/audio/
+distribusi/lisensi (Tahap E). Daftar persiapan 40 bidang ada di
+KONSEP.md (kuliner) dan PERSIAPAN.md (bidang 2–40, draf yang disetujui).
 
 ## Cara main
 
@@ -16,23 +26,25 @@ Buka `index.html` di browser (atau sajikan folder ini lewat server file
 statis apa pun). Tidak ada backend, tidak ada database, tidak ada proses
 build. Save tersimpan di browser (localStorage).
 
-1. Pilih usaha dari daftar (perhatikan sinyal permintaannya).
-2. Beli bahan.
-3. Produksi (1 produk = 1 unit tiap bahan).
-4. Atur harga jual.
-5. Klik "Hari Berikutnya": pelanggan membeli otomatis sesuai harga dan stok.
+1. Riset: gambaran kasar (gratis) → laporan detail → uji pasar.
+2. Persiapan: pilih tempat, lokasi, peralatan, urus izin, pilih menu,
+   pilih supplier per input, siapkan stok awal, ambil opsional.
+3. Buka usaha, lalu tiap hari: beli bahan (pilih supplier, tunai/tempo),
+   produksi, atur harga, jalankan hari.
+4. Bayar kewajiban tepat waktu (sewa, tempo supplier, pajak). Kas negatif
+   = peringatan; tunggakan = denda dan reputasi turun; vonis bangkrut =
+   game over dengan laporan.
 
 ## Arsitektur
 
 - HTML + CSS + JavaScript murni, tanpa engine game.
 - Mesin deterministik ber-seed: input sama menghasilkan output sama.
-- Produk adalah DATA (bukan kode): nambah produk tidak mengubah mesin.
+- Produk, supplier, tempat, lokasi, peralatan = DATA (bukan kode):
+  nambah isi tidak mengubah mesin.
 - State + fungsi simulasi + tampilan dipisah; `app.js` bisa dites dari
   Node (`node --check app.js`) karena logikanya tidak bergantung pada DOM.
 
-## Rencana berikutnya
+## Catatan
 
-Riset pasar tiga jalur (Amati, Tanya, Uji Jual) + buku catatan, pasar
-multi-produk yang diperluas (F&B dan non-F&B, harga dunia nyata),
-kompetitor NPC, barang basi, utang, dan mode karier lengkap.
-Angka-angka saat ini masih sementara dan bisa di-tuning.
+Angka-angka (harga, sewa, tempo, denda, musim) masih sementara dan bisa
+di-tuning — yang dikunci adalah sistemnya, bukan angkanya.
