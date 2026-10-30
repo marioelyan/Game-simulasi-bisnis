@@ -46,8 +46,8 @@ dari riset, bukan dari gembok, sesuai konsep). Catatan Tahap D:
 manajer belum punya moral (pendalaman nanti); riset dibayar dari
 kas unit aktif; event unit latar menunggu sampai unit dikelola lagi.
 
-Belum ada (tahap berikutnya): visual final/audio/distribusi/
-lisensi (Tahap E).
+Belum ada (tahap berikutnya): visual final/audio/distribusi
+(Tahap E).
 
 ## Cara main
 
@@ -77,3 +77,11 @@ build. Save tersimpan di browser (localStorage).
 
 Angka-angka (harga, sewa, tempo, denda, musim) masih sementara dan bisa
 di-tuning — yang dikunci adalah sistemnya, bukan angkanya.
+
+## Lisensi
+
+© 2026 Mario Elyansyah. Game ini gratis dimainkan. Kode, data, dan
+asetnya hak cipta penuh (all rights reserved) — tidak boleh disalin,
+diubah, didistribusikan ulang, atau dijual tanpa izin tertulis.
+Repo ini sengaja tanpa file LICENSE: tidak ada lisensi open source
+yang berlaku.
