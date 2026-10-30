@@ -15,10 +15,17 @@ supplier berkarakter (harga, kirim, tempo, keandalan, hubungan),
 bangkrut 3 lapis + jalan keluar darurat, pajak fondasi (PPh final 0,5%
 omzet/bulan), pinjaman normal & darurat, menang/kalah.
 
-Belum ada (tahap berikutnya): karyawan (Tahap B), event (Tahap B),
-39 bidang sisanya (Tahap C), holding (Tahap D), visual final/audio/
-distribusi/lisensi (Tahap E). Daftar persiapan 40 bidang ada di
-KONSEP.md (kuliner) dan PERSIAPAN.md (bidang 2–40, draf yang disetujui).
+Tahap B: karyawan (rekrutmen bebas, kandidat berganti tiap 7 hari,
+skill↔gaji, kapasitas + kualitas, gaji bulanan sebagai kewajiban,
+moral sederhana, PHK bebas) dan event (situasi + pilihan, panel pagi,
+kecil ~mingguan, besar ~bulanan dengan masa tenggang, tidak pernah
+langsung membangkrutkan; 6 event: viral, kompetitor baru, supplier
+bangkrut, pesanan besar, alat rusak, ulasan viral).
+
+Belum ada (tahap berikutnya): 39 bidang sisanya (Tahap C), holding
+(Tahap D), visual final/audio/distribusi/lisensi (Tahap E). Daftar
+persiapan 40 bidang ada di KONSEP.md (kuliner) dan PERSIAPAN.md
+(bidang 2–40, draf yang disetujui).
 
 ## Cara main
 
