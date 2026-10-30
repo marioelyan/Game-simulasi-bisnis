@@ -7,132 +7,185 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
+
+<!-- Bar atas ala FM -->
+<div class="topbar">
+  <button class="btn btn-kecil" id="btn-menu">☰ Menu</button>
   <div>
     <div class="brand">KONGLOMERAT</div>
-    <div class="brand-sub">Dari Rp500 ribu ke Rp50 miliar</div>
+    <div class="brand-sub" id="top-unit">Belum ada usaha</div>
   </div>
-  <div class="stats">
-    <span>Kas: <strong id="kas">-</strong></span>
-    <span>Tanggal: <strong id="tanggal">-</strong></span>
-    <span>Hari: <strong id="hari">-</strong></span>
-    <span>Runway: <strong id="runway">-</strong></span>
-    <button class="btn btn-kecil" id="btn-baru">Mulai Baru</button>
-  </div>
-</header>
+  <span class="spacer"></span>
+  <button class="btn bell" id="btn-bell">🔔<span class="badge" id="bell-count" style="display:none">0</span></button>
+  <div class="top-info"><span id="top-tanggal">-</span><b id="top-kas">-</b></div>
+  <button class="btn btn-primary" id="btn-continue" style="font-size:14px; padding:9px 18px">Lanjutkan →</button>
+</div>
 
-<main>
-  <section id="layar-riset" class="card">
-    <h2>1. Riset Pasar — Pilih Bidang</h2>
-    <p>40 bidang terbuka. Riset dulu sebelum buka usaha: tanpa jawaban mentah, yang kamu dapat perkiraan, rentang, dan sinyal — tersimpan per bidang dan bisa dibandingkan.</p>
-    <div id="riset-info"></div>
-  </section>
+<div class="layout">
 
-  <section id="layar-persiapan" class="card">
-    <h2 id="persiapan-judul">2. Persiapan Buka Usaha</h2>
-    <p>Urus satu per satu. Tiap item makan uang dan waktu. Ada prasyarat: tempat dulu baru peralatan, menu dulu baru supplier, supplier dulu baru stok awal.</p>
-    <h3>Tempat (wajib)</h3>
-    <div id="opsi-tempat" class="row"></div>
-    <h3>Lokasi (wajib)</h3>
-    <div id="opsi-lokasi" class="row"></div>
-    <h3>Peralatan (wajib)</h3>
-    <div id="opsi-peralatan" class="row"></div>
-    <h3>Izin (wajib)</h3>
-    <div class="row"><button class="btn" id="btn-izin">Urus Izin</button></div>
-    <h3 id="menu-judul">Menu Awal (wajib, pilih minimal 1)</h3>
-    <div id="opsi-menu" class="row"></div>
-    <h3>Supplier Awal (wajib, 1 per input)</h3>
-    <div id="supplier-area"></div>
-    <h3>Stok Awal (wajib)</h3>
-    <div class="row"><button class="btn" id="btn-stok-awal">Siapkan Stok Awal (5 unit per input)</button></div>
-    <h3>Opsional</h3>
-    <div id="opsi-opsional" class="row"></div>
-    <p class="muted">Karyawan direkrut setelah usaha buka (menu Rekrutmen di layar toko).</p>
-    <p id="persiapan-status"></p>
-    <div class="row"><button class="btn btn-primary" id="btn-buka">Buka Usaha</button></div>
-  </section>
+  <!-- Sidebar kiri ala FM -->
+  <aside class="side">
+    <div class="seksi">Utama</div>
+    <nav>
+      <button class="btn nav-btn" id="nav-beranda" data-nav="beranda">🏠 Beranda</button>
+      <button class="btn nav-btn" id="nav-inbox" data-nav="inbox">📥 Kotak Masuk <span class="mini-badge" id="nav-inbox-count" style="display:none">0</span></button>
+    </nav>
+    <div class="seksi">Usaha</div>
+    <nav>
+      <button class="btn nav-btn" id="nav-riset" data-nav="riset">🔍 Riset</button>
+      <button class="btn nav-btn" id="nav-persiapan" data-nav="persiapan">📋 Persiapan</button>
+      <button class="btn nav-btn" id="nav-toko" data-nav="toko">🏪 Toko</button>
+      <button class="btn nav-btn" id="nav-holding" data-nav="holding">🏢 Holding</button>
+    </nav>
+    <div class="seksi">Kelola</div>
+    <nav>
+      <button class="btn btn-kecil" id="btn-baru">Mulai Baru</button>
+    </nav>
+  </aside>
 
-  <section id="layar-toko" class="card">
-    <h2 id="toko-judul">3. Usaha Berjalan</h2>
-    <p id="toko-info"></p>
-    <div class="row"><button class="btn" id="btn-ke-holding">🏢 Holding →</button></div>
-    <p id="stok-info"></p>
-    <p id="bahan-info"></p>
-    <div id="event-panel"></div>
-    <p id="pesanan-besar-info"></p>
-    <h3>Rekrutmen</h3>
-    <div id="kandidat-area"></div>
-    <h3>Karyawan</h3>
-    <div id="staf-list"></div>
-    <h3>Manajer Unit</h3>
-    <div id="manajer-area"></div>
-    <h3>Pagi: Keputusan</h3>
-    <div class="row">
-      <label>Beli bahan:
-        <select id="beli-input"></select>
-        <select id="beli-supplier"></select>
-        <input type="number" id="beli-qty" value="10" min="1">
-        <select id="beli-cara"><option value="tunai">Tunai</option><option value="tempo">Tempo</option></select>
-        <button class="btn" id="btn-beli">Beli</button>
-      </label>
-    </div>
-    <div class="row">
-      <label>Produksi:
-        <select id="prod-produk"></select>
-        <input type="number" id="prod-qty" value="10" min="1">
-        <button class="btn" id="btn-produksi">Produksi</button>
-      </label>
-    </div>
-    <div class="row">
-      <span>Atur harga:</span>
-      <span id="harga-area"></span>
-      <button class="btn" id="btn-harga">Simpan Harga</button>
-    </div>
-    <div class="row">
-      <label>Diskon hari ini (promo/obral, %): <input type="number" id="promo-diskon" value="0" min="0" max="90"></label>
-      <button class="btn btn-primary" id="btn-hari">Jalankan Hari →</button>
-    </div>
-    <p id="laporan-hari-ini"></p>
-    <h3>Kewajiban</h3>
-    <div id="kewajiban-list"></div>
-    <h3>Jalan Keluar Darurat</h3>
-    <div class="row">
-      <button class="btn" id="btn-pinj-normal">Pinjaman Normal (Rp2jt, bunga 10%, 30 hari)</button>
-      <button class="btn" id="btn-pinj-darurat">Pinjaman Darurat (Rp1jt, bunga 25%, 14 hari)</button>
-      <button class="btn" id="btn-jual-alat">Jual Peralatan (50% harga)</button>
-    </div>
-    <p class="muted">Aturan bangkrut: kas negatif = peringatan (tidak bisa beli stok baru, supplier minta tunai, pinjaman murah tertutup). Kewajiban menunggak = denda 2%/hari, reputasi turun, supplier berhenti melayani. Vonis bangkrut = kas negatif + tunggakan &gt; 30 hari + tidak ada aset bisa dijual.</p>
-  </section>
+  <main>
+    <!-- Beranda: dashboard widget ala FM -->
+    <section id="layar-beranda">
+      <div class="widget-grid">
+        <div class="card">
+          <h3>Hari Ini</h3>
+          <p id="w-hari" style="font-size:17px; font-weight:700"></p>
+          <div class="row"><button class="btn btn-primary" id="btn-beranda-lanjut">Lanjutkan →</button></div>
+        </div>
+        <div class="card">
+          <h3>Keuangan</h3>
+          <p>Kas unit aktif: <b id="w-kas"></b><br>Kas holding: <b id="w-holding-kas"></b><br>Runway: <b id="w-runway"></b></p>
+          <p style="margin:4px 0" id="w-target"></p>
+          <div class="bar"><div id="w-bar"></div></div>
+        </div>
+        <div class="card">
+          <h3>Unit Aktif</h3>
+          <p id="w-unit"></p>
+          <p id="w-unit-detail" class="muted"></p>
+        </div>
+        <div class="card">
+          <h3>Berita Terbaru</h3>
+          <ul class="log" id="w-berita" style="max-height:120px"></ul>
+          <div class="row"><button class="btn btn-kecil" id="btn-beranda-inbox">Buka Kotak Masuk →</button></div>
+        </div>
+      </div>
+      <div class="card" id="w-mulai" style="margin-top:16px; text-align:center"></div>
+    </section>
 
-  <section id="layar-holding" class="card">
-    <h2>Holding — Ringkasan & Pengecualian</h2>
-    <p id="holding-info"></p>
-    <div id="holding-unit-list"></div>
-    <h3>Eksekutif Holding</h3>
-    <div id="holding-eksekutif"></div>
-    <h3>Buka Unit Baru</h3>
-    <div class="row">
-      <label>Bidang: <select id="holding-bidang-baru"></select></label>
-      <label>Modal awal: <input type="number" id="holding-modal-baru" value="500000" min="1"></label>
-      <button class="btn btn-primary" id="btn-buka-unit-baru">Buka Unit Baru →</button>
-    </div>
-    <h3>Kewajiban Holding</h3>
-    <div id="holding-kewajiban-list"></div>
-    <div class="row"><button class="btn btn-primary" id="btn-hari-holding">Jalankan Hari (Semua Unit) →</button></div>
-    <p id="holding-laporan"></p>
-    <p class="muted">Loop holding: ringkasan + pengecualian saja. Unit tanpa manajer hanya menjual stok saat berjalan latar; unit dengan manajer autopilot (bayar kewajiban, beli bahan, produksi). Satu unit bangkrut = unit tutup/dijual, holding selamat; kalah hanya bila holding kehabisan jalan keluar.</p>
-  </section>
+    <!-- Kotak Masuk ala FM (log pindah ke sini) -->
+    <section id="layar-inbox" class="card">
+      <h2>📥 Kotak Masuk</h2>
+      <p class="muted">Berita, laporan harian, dan hal-hal yang butuh perhatianmu. Membuka halaman ini menandai semua sudah dibaca.</p>
+      <ul id="log"></ul>
+    </section>
 
-  <section id="layar-akhir" class="card">
-    <h2 id="akhir-judul"></h2>
-    <p id="akhir-isi"></p>
-  </section>
+    <section id="layar-riset" class="card">
+      <h2>1. Riset Pasar — Pilih Bidang</h2>
+      <p>40 bidang terbuka. Riset dulu sebelum buka usaha: tanpa jawaban mentah, yang kamu dapat perkiraan, rentang, dan sinyal — tersimpan per bidang dan bisa dibandingkan.</p>
+      <div id="riset-info"></div>
+    </section>
 
-  <section class="card">
-    <h2>Log</h2>
-    <ul id="log"></ul>
-  </section>
-</main>
+    <section id="layar-persiapan" class="card">
+      <h2 id="persiapan-judul">2. Persiapan Buka Usaha</h2>
+      <p>Urus satu per satu. Tiap item makan uang dan waktu. Ada prasyarat: tempat dulu baru peralatan, menu dulu baru supplier, supplier dulu baru stok awal.</p>
+      <h3>Tempat (wajib)</h3>
+      <div id="opsi-tempat" class="row"></div>
+      <h3>Lokasi (wajib)</h3>
+      <div id="opsi-lokasi" class="row"></div>
+      <h3>Peralatan (wajib)</h3>
+      <div id="opsi-peralatan" class="row"></div>
+      <h3>Izin (wajib)</h3>
+      <div class="row"><button class="btn" id="btn-izin">Urus Izin</button></div>
+      <h3 id="menu-judul">Menu Awal (wajib, pilih minimal 1)</h3>
+      <div id="opsi-menu" class="row"></div>
+      <h3>Supplier Awal (wajib, 1 per input)</h3>
+      <div id="supplier-area"></div>
+      <h3>Stok Awal (wajib)</h3>
+      <div class="row"><button class="btn" id="btn-stok-awal">Siapkan Stok Awal (5 unit per input)</button></div>
+      <h3>Opsional</h3>
+      <div id="opsi-opsional" class="row"></div>
+      <p class="muted">Karyawan direkrut setelah usaha buka (menu Rekrutmen di layar toko).</p>
+      <p id="persiapan-status"></p>
+      <div class="row"><button class="btn btn-primary" id="btn-buka">Buka Usaha</button></div>
+    </section>
+
+    <section id="layar-toko" class="card">
+      <h2 id="toko-judul">3. Usaha Berjalan</h2>
+      <p id="toko-info"></p>
+      <div class="row"><button class="btn" id="btn-ke-holding">🏢 Holding →</button></div>
+      <p id="stok-info"></p>
+      <p id="bahan-info"></p>
+      <div id="event-panel"></div>
+      <p id="pesanan-besar-info"></p>
+      <h3>Rekrutmen</h3>
+      <div id="kandidat-area"></div>
+      <h3>Karyawan</h3>
+      <div id="staf-list"></div>
+      <h3>Manajer Unit</h3>
+      <div id="manajer-area"></div>
+      <h3>Pagi: Keputusan</h3>
+      <div class="row">
+        <label>Beli bahan:
+          <select id="beli-input"></select>
+          <select id="beli-supplier"></select>
+          <input type="number" id="beli-qty" value="10" min="1">
+          <select id="beli-cara"><option value="tunai">Tunai</option><option value="tempo">Tempo</option></select>
+          <button class="btn" id="btn-beli">Beli</button>
+        </label>
+      </div>
+      <div class="row">
+        <label>Produksi:
+          <select id="prod-produk"></select>
+          <input type="number" id="prod-qty" value="10" min="1">
+          <button class="btn" id="btn-produksi">Produksi</button>
+        </label>
+      </div>
+      <div class="row">
+        <span>Atur harga:</span>
+        <span id="harga-area"></span>
+        <button class="btn" id="btn-harga">Simpan Harga</button>
+      </div>
+      <div class="row">
+        <label>Diskon hari ini (promo/obral, %): <input type="number" id="promo-diskon" value="0" min="0" max="90"></label>
+        <button class="btn btn-primary" id="btn-hari">Jalankan Hari →</button>
+      </div>
+      <p id="laporan-hari-ini"></p>
+      <h3>Kewajiban</h3>
+      <div id="kewajiban-list"></div>
+      <h3>Jalan Keluar Darurat</h3>
+      <div class="row">
+        <button class="btn" id="btn-pinj-normal">Pinjaman Normal (Rp2jt, bunga 10%, 30 hari)</button>
+        <button class="btn" id="btn-pinj-darurat">Pinjaman Darurat (Rp1jt, bunga 25%, 14 hari)</button>
+        <button class="btn" id="btn-jual-alat">Jual Peralatan (50% harga)</button>
+      </div>
+      <p class="muted">Aturan bangkrut: kas negatif = peringatan (tidak bisa beli stok baru, supplier minta tunai, pinjaman murah tertutup). Kewajiban menunggak = denda 2%/hari, reputasi turun, supplier berhenti melayani. Vonis bangkrut = kas negatif + tunggakan &gt; 30 hari + tidak ada aset bisa dijual.</p>
+    </section>
+
+    <section id="layar-holding" class="card">
+      <h2>Holding — Ringkasan & Pengecualian</h2>
+      <p id="holding-info"></p>
+      <div id="holding-unit-list"></div>
+      <h3>Eksekutif Holding</h3>
+      <div id="holding-eksekutif"></div>
+      <h3>Buka Unit Baru</h3>
+      <div class="row">
+        <label>Bidang: <select id="holding-bidang-baru"></select></label>
+        <label>Modal awal: <input type="number" id="holding-modal-baru" value="500000" min="1"></label>
+        <button class="btn btn-primary" id="btn-buka-unit-baru">Buka Unit Baru →</button>
+      </div>
+      <h3>Kewajiban Holding</h3>
+      <div id="holding-kewajiban-list"></div>
+      <div class="row"><button class="btn btn-primary" id="btn-hari-holding">Jalankan Hari (Semua Unit) →</button></div>
+      <p id="holding-laporan"></p>
+      <p class="muted">Loop holding: ringkasan + pengecualian saja. Unit tanpa manajer hanya menjual stok saat berjalan latar; unit dengan manajer autopilot (bayar kewajiban, beli bahan, produksi). Satu unit bangkrut = unit tutup/dijual, holding selamat; kalah hanya bila holding kehabisan jalan keluar.</p>
+    </section>
+
+    <section id="layar-akhir" class="card">
+      <h2 id="akhir-judul"></h2>
+      <p id="akhir-isi"></p>
+    </section>
+  </main>
+</div>
 
 <script src="bidang.js"></script>
 <script src="app.js"></script>

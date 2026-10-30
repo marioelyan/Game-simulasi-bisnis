@@ -156,7 +156,8 @@ function createState(seed) {
     holdingKas: 0, eksekutif: { ceo: null, direktur: null }, kewajibanHolding: [],
     unitCounter: 1, unitBaru: false,
     praPinjaman: [], // pinjaman yang diambil sebelum toko buka, diubah jadi kewajiban saat buka
-    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Pilih bidang, riset pasarnya, lalu siapkan usahamu satu per satu.' }]
+    log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Pilih bidang, riset pasarnya, lalu siapkan usahamu satu per satu.' }],
+    unread: 0 // pesan kotak masuk yang belum dibaca (V2: badge bel FM)
   };
   muatBidang('kuliner');
   return st;
@@ -1116,23 +1117,109 @@ function jalankanHariHolding(state, diskonPersen) {
 // ---- UI (browser saja; logika di atas bisa dites dari Node) ----
 if (typeof document !== 'undefined') {
   var state = null;
+  var layar = null; // tampilan aktif (null = ikuti fase); Beranda & Kotak Masuk hanya tampilan, bukan fase
   function muat() {
     try {
       var raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; if (!state.bidang) state.bidang = 'kuliner'; if (state.riset && typeof state.riset.lapis1 !== 'undefined') { state.riset = { kuliner: state.riset }; } if (!state.riset) state.riset = {}; if (!state.units) state.units = []; if (state.holdingKas === undefined) state.holdingKas = 0; if (!state.eksekutif) state.eksekutif = { ceo: null, direktur: null }; if (!state.kewajibanHolding) state.kewajibanHolding = []; if (state.unitCounter === undefined) state.unitCounter = state.toko ? 2 : 1; if (state.unitBaru === undefined) state.unitBaru = false; muatBidang(state.bidang); if (state.toko) { if (!state.toko.nama) state.toko.nama = 'Unit 1 — ' + NAMA_BIDANG; if (state.toko.omzetBulan === undefined) { state.toko.omzetBulan = 0; state.toko.bulanBerjalan = state.tanggal.slice(0, 7); } } state.units.forEach(function (u) { if (u.toko && u.toko.omzetBulan === undefined) { u.toko.omzetBulan = 0; u.toko.bulanBerjalan = state.tanggal.slice(0, 7); } }); return; } }
+      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; if (!state.bidang) state.bidang = 'kuliner'; if (state.riset && typeof state.riset.lapis1 !== 'undefined') { state.riset = { kuliner: state.riset }; } if (!state.riset) state.riset = {}; if (!state.units) state.units = []; if (state.holdingKas === undefined) state.holdingKas = 0; if (!state.eksekutif) state.eksekutif = { ceo: null, direktur: null }; if (!state.kewajibanHolding) state.kewajibanHolding = []; if (state.unitCounter === undefined) state.unitCounter = state.toko ? 2 : 1; if (state.unitBaru === undefined) state.unitBaru = false; if (state.unread === undefined) state.unread = 0; muatBidang(state.bidang); if (state.toko) { if (!state.toko.nama) state.toko.nama = 'Unit 1 — ' + NAMA_BIDANG; if (state.toko.omzetBulan === undefined) { state.toko.omzetBulan = 0; state.toko.bulanBerjalan = state.tanggal.slice(0, 7); } } state.units.forEach(function (u) { if (u.toko && u.toko.omzetBulan === undefined) { u.toko.omzetBulan = 0; u.toko.bulanBerjalan = state.tanggal.slice(0, 7); } }); return; } }
     } catch (e) { /* abaikan */ }
     state = createState();
   }
   function simpan() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* abaikan */ } }
   function el(id) { return document.getElementById(id); }
-  function aksi(fn) { var r = fn(); if (!r.ok) alert(r.msg); simpan(); render(); return r; }
+  function aksi(fn) { var sebelum = state.fase; var r = fn(); if (!r.ok) alert(r.msg); if (state.fase !== sebelum) layar = null; simpan(); render(); return r; }
 
-  function renderHeader() {
-    el('kas').textContent = fmtRp(state.kas);
-    el('tanggal').textContent = state.tanggal;
-    el('hari').textContent = state.hari;
-    el('runway').textContent = state.toko ? runwayHari(state) + ' hari' : '-';
-    if (state.kas < 0) el('kas').style.color = '#DC2626'; else el('kas').style.color = '';
+  // ---------- V2: layout FM (bar atas, sidebar, Beranda, Kotak Masuk) ----------
+  function fmtTanggalID(iso) {
+    var p = iso.split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    return d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function faseKeLayar(f) {
+    if (f === 'persiapan') return 'persiapan';
+    if (f === 'toko') return 'toko';
+    if (f === 'holding') return 'holding';
+    if (f === 'bangkrut' || f === 'menang') return 'akhir';
+    if (f === 'riset') return 'riset';
+    return 'beranda'; // pilihBidang mendarat di Beranda (hub ala FM)
+  }
+  function keLayar(id) {
+    if (id === 'inbox') { state.unread = 0; simpan(); }
+    // Pindah Toko/Holding juga memindah fase (seperti tombol lama); Beranda,
+    // Kotak Masuk, Riset, Persiapan hanya tampilan.
+    if (id === 'toko' && state.toko) { state.fase = 'toko'; simpan(); }
+    if (id === 'holding' && (state.toko || (state.units || []).length)) { state.fase = 'holding'; simpan(); }
+    layar = id;
+    var layout = document.querySelector('.layout');
+    if (layout) layout.classList.remove('menu-buka');
+    el('btn-menu').textContent = '☰ Menu';
+    render();
+  }
+  function updateNav() {
+    var aktif = layar || faseKeLayar(state.fase);
+    document.querySelectorAll('.nav-btn').forEach(function (b) {
+      b.classList.toggle('btn-aktif', b.getAttribute('data-nav') === aktif);
+    });
+    el('nav-riset').disabled = !(state.fase === 'pilihBidang' || state.fase === 'persiapan');
+    el('nav-persiapan').disabled = state.fase !== 'persiapan';
+    el('nav-toko').disabled = !state.toko;
+    el('nav-holding').disabled = !(state.fase === 'toko' || state.fase === 'holding');
+  }
+  function renderTopbar() {
+    el('top-kas').textContent = (state.kas < 0 ? '⚠ ' : '') + fmtRp(state.kas);
+    el('top-tanggal').textContent = fmtTanggalID(state.tanggal) + ' · Hari ' + state.hari;
+    el('top-unit').textContent = state.toko ? state.toko.nama : 'Belum ada usaha';
+    el('btn-continue').disabled = (state.fase === 'bangkrut' || state.fase === 'menang');
+    var badge = el('bell-count');
+    badge.textContent = state.unread || 0;
+    badge.style.display = (state.unread || 0) > 0 ? '' : 'none';
+    var navBadge = el('nav-inbox-count');
+    navBadge.textContent = state.unread || 0;
+    navBadge.style.display = (state.unread || 0) > 0 ? '' : 'none';
+  }
+  function renderBeranda() {
+    var total = totalAsetHolding(state);
+    el('w-hari').textContent = fmtTanggalID(state.tanggal) + ' · Hari ' + state.hari;
+    el('w-kas').textContent = fmtRp(state.kas);
+    el('w-holding-kas').textContent = fmtRp(state.holdingKas || 0);
+    el('w-runway').textContent = state.toko ? runwayHari(state) + ' hari' : '—';
+    el('w-target').textContent = fmtRp(total) + ' / ' + fmtRp(TARGET_MENANG) + ' (' + (total / TARGET_MENANG * 100).toFixed(4) + '%)';
+    el('w-bar').style.width = Math.min(100, total / TARGET_MENANG * 100) + '%';
+    if (state.toko) {
+      el('w-unit').textContent = state.toko.nama + ' (' + NAMA_BIDANG + ')';
+      el('w-unit-detail').textContent = 'Reputasi ' + state.toko.reputasi.toFixed(2) + ' · Kapasitas ' + state.toko.kapasitas + '/hari · Sewa ' + fmtRp(state.toko.sewaBulan) + '/bulan';
+    } else {
+      el('w-unit').textContent = 'Belum ada usaha';
+      el('w-unit-detail').textContent = '';
+    }
+    el('w-berita').innerHTML = state.log.slice(0, 3).map(function (e) { return '<li>Hari ' + e.hari + ': ' + e.teks + '</li>'; }).join('');
+    var cta = el('w-mulai');
+    if (!state.toko) {
+      cta.style.display = '';
+      if (state.fase === 'persiapan') cta.innerHTML = '<p><strong>Persiapan berjalan.</strong> Lanjutkan persiapan unit barumu.</p><button class="btn btn-primary" id="btn-beranda-persiapan">Lanjut Persiapan →</button>';
+      else if (state.fase === 'holding') cta.innerHTML = '<p><strong>Tidak ada unit aktif.</strong> Buka unit baru dari kas holding.</p><button class="btn btn-primary" id="btn-beranda-holding">Ke Holding →</button>';
+      else cta.innerHTML = '<p><strong>Belum ada usaha.</strong> Langkah pertama: riset pasar, lalu buka usaha pertamamu.</p><button class="btn btn-primary" id="btn-beranda-riset">Mulai Riset →</button>';
+      var br = el('btn-beranda-riset'); if (br) br.addEventListener('click', function () { keLayar('riset'); });
+      var bp = el('btn-beranda-persiapan'); if (bp) bp.addEventListener('click', function () { keLayar('persiapan'); });
+      var bh = el('btn-beranda-holding'); if (bh) bh.addEventListener('click', function () { keLayar('holding'); });
+    } else {
+      cta.style.display = 'none';
+    }
+    el('btn-beranda-lanjut').style.display = state.toko ? '' : 'none';
+  }
+  function lanjutkan() {
+    if (state.fase === 'bangkrut' || state.fase === 'menang') return;
+    if (!state.toko) {
+      if (state.fase === 'persiapan') keLayar('persiapan');
+      else if (state.fase === 'holding') keLayar('holding');
+      else keLayar('riset');
+      return;
+    }
+    var r = aksi(function () { return jalankanHariHolding(state, 0); });
+    if (r.ok) { state.unread = (state.unread || 0) + 1; simpan(); }
+    if (state.fase === 'bangkrut' || state.fase === 'menang') layar = null;
+    else layar = 'beranda';
+    render();
   }
   function renderLog() {
     el('log').innerHTML = state.log.map(function (e) { return '<li>Hari ' + e.hari + ': ' + e.teks + '</li>'; }).join('');
@@ -1300,7 +1387,7 @@ if (typeof document !== 'undefined') {
       if (kas < 0) peringatan.push('KAS NEGATIF');
       if (menunggak) peringatan.push(menunggak + ' menunggak');
       if (!t.manajer) peringatan.push('tanpa manajer (latar: jual stok saja)');
-      return '<div><strong>' + nama + '</strong> — kas ' + fmtRp(kas) + ', runway ' + runwayUnit(t, kas) + (peringatan.length ? ' — <span style="color:#DC2626">' + peringatan.join(', ') + '</span>' : '') + ' ' + (aktif ? '(aktif)' : '<button class="btn" data-kelola="' + nama + '">Kelola</button>') + ' <label>Dividen <input type="number" id="div-' + nama + '" value="100000" min="1"> <button class="btn" data-div="' + nama + '">Tarik</button></label> <label>Suntik <input type="number" id="sun-' + nama + '" value="100000" min="1"> <button class="btn" data-sun="' + nama + '">Suntik</button></label></div>';
+      return '<div><strong>' + nama + '</strong> — kas ' + fmtRp(kas) + ', runway ' + runwayUnit(t, kas) + (peringatan.length ? ' — <strong>⚠ ' + peringatan.join(', ') + '</strong>' : '') + ' ' + (aktif ? '(aktif)' : '<button class="btn" data-kelola="' + nama + '">Kelola</button>') + ' <label>Dividen <input type="number" id="div-' + nama + '" value="100000" min="1"> <button class="btn" data-div="' + nama + '">Tarik</button></label> <label>Suntik <input type="number" id="sun-' + nama + '" value="100000" min="1"> <button class="btn" data-sun="' + nama + '">Suntik</button></label></div>';
     }
     if (state.toko) rows.push(barisUnit(state.toko.nama, state.kas, state.toko, true));
     (state.units || []).forEach(function (u) { rows.push(barisUnit(u.toko.nama, u.kas, u.toko, false)); });
@@ -1310,7 +1397,7 @@ if (typeof document !== 'undefined') {
       btn.addEventListener('click', function () {
         var entry = null;
         state.units.forEach(function (u) { if (u.toko.nama === btn.getAttribute('data-kelola')) entry = u; });
-        if (entry) { muatUnitDariEntry(state, entry); simpan(); render(); }
+        if (entry) { muatUnitDariEntry(state, entry); layar = null; simpan(); render(); }
       });
     });
     el('holding-unit-list').querySelectorAll('button[data-div]').forEach(function (btn) {
@@ -1341,22 +1428,26 @@ if (typeof document !== 'undefined') {
     });
   }
   function render() {
-    renderHeader();
-    var risetTampil = state.fase === 'pilihBidang' || state.fase === 'riset' || state.fase === 'persiapan';
-    el('layar-riset').style.display = risetTampil ? 'block' : 'none';
-    el('layar-persiapan').style.display = state.fase === 'persiapan' ? 'block' : 'none';
-    el('layar-toko').style.display = state.fase === 'toko' ? 'block' : 'none';
-    el('layar-holding').style.display = state.fase === 'holding' ? 'block' : 'none';
-    el('layar-akhir').style.display = (state.fase === 'bangkrut' || state.fase === 'menang') ? 'block' : 'none';
+    renderTopbar();
+    var l = layar || faseKeLayar(state.fase);
+    el('layar-beranda').style.display = l === 'beranda' ? 'block' : 'none';
+    el('layar-inbox').style.display = l === 'inbox' ? 'block' : 'none';
+    el('layar-riset').style.display = l === 'riset' ? 'block' : 'none';
+    el('layar-persiapan').style.display = l === 'persiapan' ? 'block' : 'none';
+    el('layar-toko').style.display = l === 'toko' ? 'block' : 'none';
+    el('layar-holding').style.display = l === 'holding' ? 'block' : 'none';
+    el('layar-akhir').style.display = l === 'akhir' ? 'block' : 'none';
     el('persiapan-judul').textContent = '2. Persiapan Buka Usaha — ' + NAMA_BIDANG;
     el('toko-judul').textContent = '3. Usaha Berjalan — ' + NAMA_BIDANG;
-    if (risetTampil) renderRiset();
-    if (state.fase === 'persiapan') renderPersiapan();
-    if (state.fase === 'holding') renderHolding();
-    if (state.fase === 'toko') renderToko();
+    if (l === 'beranda') renderBeranda();
+    if (l === 'riset') renderRiset();
+    if (l === 'persiapan') renderPersiapan();
+    if (l === 'holding') renderHolding();
+    if (l === 'toko') renderToko();
     if (state.fase === 'bangkrut') { el('akhir-judul').textContent = 'BANGKRUT'; el('akhir-isi').textContent = 'Usaha tutup. Kas ' + fmtRp(state.kas) + '. Lihat log untuk urutan kesalahanmu, lalu coba lagi dengan keputusan berbeda.'; }
     if (state.fase === 'menang') { el('akhir-judul').textContent = 'MENANG — KONGLOMERAT!'; el('akhir-isi').textContent = 'Total aset mencapai ' + fmtRp(TARGET_MENANG) + '. Dari modal ' + fmtRp(MODAL_AWAL) + ' menjadi konglomerat!'; }
     renderLog();
+    updateNav();
   }
   document.addEventListener('DOMContentLoaded', function () {
     muat();
@@ -1382,27 +1473,29 @@ if (typeof document !== 'undefined') {
       });
     });
     el('btn-hari').addEventListener('click', function () {
-      aksi(function () {
-        var r = jalankanHariHolding(state, parseInt(el('promo-diskon').value, 10) || 0);
-        if (r.ok) {
-          var lap = r.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
-          var latarTxt = (r.latar || []).map(function (x) { return x.nama + ': ' + fmtRp(x.pendapatan) + (x.peringatan.length ? ' (' + x.peringatan.join(', ') + ')' : ''); }).join(' | ');
-          el('laporan-hari-ini').textContent = 'Kemarin: ' + lap + ' | Total pendapatan: ' + fmtRp(r.pendapatan) + (latarTxt ? ' | Latar: ' + latarTxt : '') + (r.unitTutup ? ' | UNIT TUTUP: ' + r.unitTutup : '');
+      var r = aksi(function () {
+        var r2 = jalankanHariHolding(state, parseInt(el('promo-diskon').value, 10) || 0);
+        if (r2.ok) {
+          var lap = r2.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
+          var latarTxt = (r2.latar || []).map(function (x) { return x.nama + ': ' + fmtRp(x.pendapatan) + (x.peringatan.length ? ' (' + x.peringatan.join(', ') + ')' : ''); }).join(' | ');
+          el('laporan-hari-ini').textContent = 'Kemarin: ' + lap + ' | Total pendapatan: ' + fmtRp(r2.pendapatan) + (latarTxt ? ' | Latar: ' + latarTxt : '') + (r2.unitTutup ? ' | UNIT TUTUP: ' + r2.unitTutup : '');
         }
-        return r;
+        return r2;
       });
+      if (r.ok) { state.unread = (state.unread || 0) + 1; simpan(); render(); }
     });
     el('btn-ke-holding').addEventListener('click', function () { aksi(function () { return kembaliKeHolding(state); }); });
     el('btn-hari-holding').addEventListener('click', function () {
-      aksi(function () {
-        var r = jalankanHariHolding(state, 0);
-        if (r.ok) {
-          var lap = r.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
-          var latarTxt = (r.latar || []).map(function (x) { return x.nama + ': ' + fmtRp(x.pendapatan) + (x.peringatan.length ? ' (' + x.peringatan.join(', ') + ')' : ''); }).join(' | ');
-          el('holding-laporan').textContent = 'Unit aktif: ' + lap + ' | Total: ' + fmtRp(r.pendapatan) + (latarTxt ? ' | Latar: ' + latarTxt : '') + (r.unitTutup ? ' | UNIT TUTUP: ' + r.unitTutup : '');
+      var r = aksi(function () {
+        var r2 = jalankanHariHolding(state, 0);
+        if (r2.ok) {
+          var lap = r2.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
+          var latarTxt = (r2.latar || []).map(function (x) { return x.nama + ': ' + fmtRp(x.pendapatan) + (x.peringatan.length ? ' (' + x.peringatan.join(', ') + ')' : ''); }).join(' | ');
+          el('holding-laporan').textContent = 'Unit aktif: ' + lap + ' | Total: ' + fmtRp(r2.pendapatan) + (latarTxt ? ' | Latar: ' + latarTxt : '') + (r2.unitTutup ? ' | UNIT TUTUP: ' + r2.unitTutup : '');
         }
-        return r;
+        return r2;
       });
+      if (r.ok) { state.unread = (state.unread || 0) + 1; simpan(); render(); }
     });
     el('btn-buka-unit-baru').addEventListener('click', function () {
       aksi(function () { return bukaUnitBaruMulai(state, el('holding-bidang-baru').value, parseInt(el('holding-modal-baru').value, 10) || 0); });
@@ -1411,8 +1504,20 @@ if (typeof document !== 'undefined') {
     el('btn-pinj-darurat').addEventListener('click', function () { aksi(function () { return ambilPinjaman(state, 'darurat'); }); });
     el('btn-jual-alat').addEventListener('click', function () { aksi(function () { return jualPeralatan(state); }); });
     el('btn-baru').addEventListener('click', function () {
-      if (confirm('Mulai dari awal? Progres saat ini akan dihapus.')) { state = createState(); simpan(); render(); }
+      if (confirm('Mulai dari awal? Progres saat ini akan dihapus.')) { state = createState(); layar = null; simpan(); render(); }
     });
+    el('btn-menu').addEventListener('click', function () {
+      var layout = document.querySelector('.layout');
+      layout.classList.toggle('menu-buka');
+      el('btn-menu').textContent = layout.classList.contains('menu-buka') ? '✕ Tutup' : '☰ Menu';
+    });
+    document.querySelectorAll('[data-nav]').forEach(function (b) {
+      b.addEventListener('click', function () { keLayar(b.getAttribute('data-nav')); });
+    });
+    el('btn-bell').addEventListener('click', function () { keLayar('inbox'); });
+    el('btn-continue').addEventListener('click', lanjutkan);
+    el('btn-beranda-lanjut').addEventListener('click', lanjutkan);
+    el('btn-beranda-inbox').addEventListener('click', function () { keLayar('inbox'); });
     render();
   });
 }

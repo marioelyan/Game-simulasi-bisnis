@@ -1,25 +1,60 @@
-/* Konglomerat Tahap A — dashboard padat, serius, bukan anak-anak. */
+/* Konglomerat V2 — layout menu gaya Football Manager, warna PUTIH POLOS.
+   Hanya putih, hitam, dan abu-abu. Tanpa warna dekoratif; status bahaya
+   ditandai teks tebal + ⚠, bukan warna. */
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #F1F5F9; color: #0F172A; font-size: 15px; }
-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #0F172A; color: #F8FAFC; }
-.brand { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
-.brand-sub { font-size: 12px; color: #94A3B8; }
-.stats { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-main { max-width: 960px; margin: 0 auto; padding: 16px; }
-.card { background: #fff; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-h2 { margin: 0 0 8px; font-size: 18px; }
-h3 { margin: 16px 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
-.btn { padding: 7px 12px; border: 1px solid #CBD5E1; background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
-.btn:hover { background: #F8FAFC; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: #0F172A; color: #fff; border-color: #0F172A; }
-.btn-primary:hover { background: #1E293B; }
-.btn-aktif { border-color: #0F172A; background: #E2E8F0; font-weight: 600; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #FFFFFF; color: #111111; font-size: 15px; }
+
+/* Bar atas ala FM: brand | unit | bel | tanggal/kas | Lanjutkan */
+.topbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1.5px solid #E5E5E5; position: sticky; top: 0; background: #FFFFFF; z-index: 20; }
+.brand { font-size: 19px; font-weight: 800; letter-spacing: 1px; }
+.brand-sub { font-size: 12px; color: #666666; }
+.spacer { flex: 1; }
+.bell { position: relative; }
+.badge { position: absolute; top: -8px; right: -8px; background: #111111; color: #FFFFFF; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
+.top-info { font-size: 13px; text-align: right; }
+.top-info b { display: block; font-size: 14px; }
+
+/* Layout: sidebar kiri + konten */
+.layout { display: flex; gap: 16px; max-width: 1240px; margin: 0 auto; padding: 16px; align-items: flex-start; }
+main { flex: 1; min-width: 0; }
+.side { width: 240px; flex-shrink: 0; position: sticky; top: 70px; border: 1.5px solid #E5E5E5; border-radius: 10px; padding: 12px; background: #FFFFFF; }
+.side .seksi { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #666666; }
+.side .seksi:first-child { margin-top: 0; }
+.side nav .btn { display: flex; justify-content: space-between; width: 100%; text-align: left; margin-bottom: 5px; }
+.side nav .mini-badge { background: #111111; color: #FFFFFF; font-size: 11px; border-radius: 10px; padding: 1px 7px; }
+
+.card { background: #FFFFFF; border: 1.5px solid #E5E5E5; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+h2 { margin: 0 0 8px; font-size: 19px; }
+h3 { margin: 16px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #666666; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+
+/* Tombol + animasi (disetujui di demo): naik saat hover, mengecil saat tekan */
+.btn { padding: 8px 14px; border: 1.5px solid #DDDDDD; background: #FFFFFF; color: #111111; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
+  transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(0,0,0,.12); border-color: #111111; }
+.btn:active { transform: scale(.96) translateY(0); box-shadow: 0 1px 3px rgba(0,0,0,.10); }
+.btn:focus-visible { outline: 2px solid #111111; outline-offset: 2px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-primary { background: #111111; color: #FFFFFF; border-color: #111111; font-size: 16px; padding: 11px 22px; }
+.btn-primary:hover { background: #000000; border-color: #000000; }
+.btn-aktif { background: #111111; color: #FFFFFF; border-color: #111111; }
 .btn-kecil { padding: 5px 10px; font-size: 13px; }
-input, select { padding: 6px 8px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 14px; }
-.muted { color: #64748B; font-size: 13px; }
-.event-box { background: #FFFBEB; border: 1px solid #F59E0B; border-radius: 8px; padding: 12px; margin: 10px 0; }
+input, select { padding: 8px 10px; border: 1.5px solid #DDDDDD; border-radius: 8px; font-size: 14px; background: #FFFFFF; color: #111111; }
+.muted { color: #666666; font-size: 13px; }
+.event-box { border: 1.5px solid #111111; background: #F5F5F5; border-radius: 8px; padding: 12px; margin: 10px 0; }
+.bar { height: 10px; background: #EEEEEE; border-radius: 8px; overflow: hidden; }
+.bar > div { height: 100%; background: #111111; width: 0%; }
+.widget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.widget-grid .card { margin-bottom: 0; }
 #bidang-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-#log { max-height: 260px; overflow-y: auto; padding-left: 20px; }
-#log li { margin-bottom: 4px; }
+#log, .log { max-height: 260px; overflow-y: auto; padding-left: 20px; }
+#log li, .log li { margin-bottom: 4px; }
+
+#btn-menu { display: none; }
+@media (max-width: 900px) {
+  #btn-menu { display: inline-block; }
+  .layout { flex-direction: column; }
+  .side { display: none; width: auto; position: static; }
+  .layout.menu-buka .side { display: block; }
+  .widget-grid { grid-template-columns: 1fr; }
+}
