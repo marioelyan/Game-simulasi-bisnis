@@ -55,6 +55,7 @@
   <section id="layar-toko" class="card">
     <h2 id="toko-judul">3. Usaha Berjalan</h2>
     <p id="toko-info"></p>
+    <div class="row"><button class="btn" id="btn-ke-holding">🏢 Holding →</button></div>
     <p id="stok-info"></p>
     <p id="bahan-info"></p>
     <div id="event-panel"></div>
@@ -63,6 +64,8 @@
     <div id="kandidat-area"></div>
     <h3>Karyawan</h3>
     <div id="staf-list"></div>
+    <h3>Manajer Unit</h3>
+    <div id="manajer-area"></div>
     <h3>Pagi: Keputusan</h3>
     <div class="row">
       <label>Beli bahan:
@@ -99,6 +102,25 @@
       <button class="btn" id="btn-jual-alat">Jual Peralatan (50% harga)</button>
     </div>
     <p class="muted">Aturan bangkrut: kas negatif = peringatan (tidak bisa beli stok baru, supplier minta tunai, pinjaman murah tertutup). Kewajiban menunggak = denda 2%/hari, reputasi turun, supplier berhenti melayani. Vonis bangkrut = kas negatif + tunggakan &gt; 30 hari + tidak ada aset bisa dijual.</p>
+  </section>
+
+  <section id="layar-holding" class="card">
+    <h2>Holding — Ringkasan & Pengecualian</h2>
+    <p id="holding-info"></p>
+    <div id="holding-unit-list"></div>
+    <h3>Eksekutif Holding</h3>
+    <div id="holding-eksekutif"></div>
+    <h3>Buka Unit Baru</h3>
+    <div class="row">
+      <label>Bidang: <select id="holding-bidang-baru"></select></label>
+      <label>Modal awal: <input type="number" id="holding-modal-baru" value="500000" min="1"></label>
+      <button class="btn btn-primary" id="btn-buka-unit-baru">Buka Unit Baru →</button>
+    </div>
+    <h3>Kewajiban Holding</h3>
+    <div id="holding-kewajiban-list"></div>
+    <div class="row"><button class="btn btn-primary" id="btn-hari-holding">Jalankan Hari (Semua Unit) →</button></div>
+    <p id="holding-laporan"></p>
+    <p class="muted">Loop holding: ringkasan + pengecualian saja. Unit tanpa manajer hanya menjual stok saat berjalan latar; unit dengan manajer autopilot (bayar kewajiban, beli bahan, produksi). Satu unit bangkrut = unit tutup/dijual, holding selamat; kalah hanya bila holding kehabisan jalan keluar.</p>
   </section>
 
   <section id="layar-akhir" class="card">

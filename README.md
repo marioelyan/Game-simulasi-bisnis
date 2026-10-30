@@ -29,13 +29,25 @@ izin, produk/jasa, peran karyawan). Bidang jasa menjual kapasitas
 harian yang hangus di akhir hari. Data bidang di `bidang.js`
 (dari PERSIAPAN.md + angka tuning sementara).
 
+Tahap D: holding — multi-unit dengan kas per unit, kas holding,
+dividen (unit → holding) dan suntik modal (holding → unit),
+eksekutif (manajer per unit = autopilot latar: bayar kewajiban,
+beli bahan, produksi; CEO = permintaan semua unit +5%; direktur =
+biaya input semua unit −5%), tutup unit (bangkrut satu unit =
+dilikuidasi rugi ke kas holding, holding selamat) vs bangkrut
+holding (kas holding negatif + tunggakan holding + tidak ada unit
+bisa dividen), menang = total aset holding Rp50 miliar. Loop
+holding = ringkasan + pengecualian saja.
+
 Catatan Tahap C: lokasi masih tier generik (per-bidang menyusul
 sebagai pendalaman data); beberapa bidang dimodelkan sederhana
 (mis. keuangan mikro, kos, kendaraan bekas — kelayakannya terlihat
-dari riset, bukan dari gembok, sesuai konsep).
+dari riset, bukan dari gembok, sesuai konsep). Catatan Tahap D:
+manajer belum punya moral (pendalaman nanti); riset dibayar dari
+kas unit aktif; event unit latar menunggu sampai unit dikelola lagi.
 
-Belum ada (tahap berikutnya): holding (Tahap D), visual
-final/audio/distribusi/lisensi (Tahap E).
+Belum ada (tahap berikutnya): visual final/audio/distribusi/
+lisensi (Tahap E).
 
 ## Cara main
 

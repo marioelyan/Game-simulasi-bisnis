@@ -151,9 +151,11 @@ function createState(seed) {
     bidang: 'kuliner', risetDipilih: null,
     riset: {}, // bidangId -> { lapis1, lapis2, lapis3: null | {hasil:[]} }
     siap: { tempat: null, lokasi: null, peralatan: null, izin: false, menu: [], supplier: {}, stokAwal: false, promo: false, platform: false, halal: false },
-    toko: null, // diisi saat buka usaha
+    toko: null, // diisi saat buka usaha (unit aktif; sisanya di units[])
+    units: [], // unit non-aktif: {bidang, toko, siap, kas} (toko.nama = nama unit)
+    holdingKas: 0, eksekutif: { ceo: null, direktur: null }, kewajibanHolding: [],
+    unitCounter: 1, unitBaru: false,
     praPinjaman: [], // pinjaman yang diambil sebelum toko buka, diubah jadi kewajiban saat buka
-    omzetBulan: 0, bulanBerjalan: null,
     log: [{ hari: 1, teks: 'Kamu punya modal ' + fmtRp(MODAL_AWAL) + '. Pilih bidang, riset pasarnya, lalu siapkan usahamu satu per satu.' }]
   };
   muatBidang('kuliner');
@@ -326,8 +328,9 @@ function bukaUsaha(state) {
   var sewaBulan = Math.round(TEMPAT[s.tempat].sewaBulan * LOKASI[s.lokasi].pengaliSewa);
   var reputasi = 1.0 + (s.promo ? 0.10 : 0) + PERALATAN[s.peralatan].mutu;
   state.toko = {
+    nama: 'Unit ' + state.unitCounter + ' — ' + NAMA_BIDANG,
     bidang: state.bidang, tempat: s.tempat, lokasi: s.lokasi, peralatan: s.peralatan,
-    sewaBulan: sewaBulan, reputasi: reputasi,
+    sewaBulan: sewaBulan, reputasi: reputasi, omzetBulan: 0, bulanBerjalan: state.tanggal.slice(0, 7),
     stok: {}, bahan: {}, harga: {}, pesanan: [], kewajiban: [],
     hubungan: {}, // supplierKey -> level 0..5
     karyawan: [], kandidat: [], kandidatRefreshHari: state.hari,
@@ -352,10 +355,10 @@ function bukaUsaha(state) {
   state.praPinjaman = [];
   // Kewajiban sewa pertama jatuh tempo 30 hari lagi; pajak dihitung tiap akhir bulan.
   state.toko.kewajiban.push({ id: 'sewa-' + state.hari, jenis: 'Sewa tempat', jumlah: sewaBulan, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0 });
-  state.bulanBerjalan = state.tanggal.slice(0, 7);
-  state.omzetBulan = 0;
   refreshKandidat(state);
   state.fase = 'toko';
+  state.unitCounter++;
+  state.unitBaru = false;
   pushLog(state, 'Usaha dibuka! Sewa ' + fmtRp(sewaBulan) + '/bulan, kapasitas ' + state.toko.kapasitas + ' unit/hari, reputasi awal ' + reputasi.toFixed(2) + '.');
   return { ok: true, msg: 'Usaha dibuka!' };
 }
@@ -404,6 +407,7 @@ function beliBahan(state, inputId, arkeId, qty, cara) {
   var diskon = level * 0.01;
   var hargaSatuan = Math.round(info.harga * (1 - diskon));
   var biaya = hargaSatuan * qty;
+  if (state.eksekutif && state.eksekutif.direktur) biaya = Math.round(biaya * 0.95); // direktur: efisiensi -5%
   var rng = mulberry32(state.seed + state.hari * 31 + inputId.length);
   var telat = rng() > info.andal ? 1 : 0; // supplier kurang andal bisa telat 1 hari
   var tiba = addDays(state.tanggal, info.kirimHari + telat);
@@ -463,6 +467,9 @@ function bayarKewajiban(state, kewajibanId) {
       pushLog(state, 'Gaji dibayar, moral ' + staf.nama + ' naik. Gaji bulan berikutnya dijadwalkan.');
     }
   }
+  if (k.manajerId && t.manajer) {
+    t.kewajiban.push({ id: 'manajer-' + state.hari, jenis: 'Gaji Manajer ' + t.manajer.nama, jumlah: t.manajer.gaji, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0, manajerId: 'manajer' });
+  }
   pushLog(state, 'Kewajiban dibayar: ' + k.jenis + ' ' + fmtRp(total) + '.');
   return { ok: true, msg: 'Dibayar.' };
 }
@@ -473,6 +480,15 @@ function faktorHarga(hargaAcuan, hargaEfektif) {
   if (f < 0.3) f = 0.3;
   if (f > 2.0) f = 2.0;
   return f;
+}
+// Rumus permintaan murni (dipakai unit aktif & unit latar; CEO holding +5%).
+function hitungPermintaan(p, hargaEfektif, reputasi, musim, faktorPesaing, faktorTempat, kualitasStaf, efekPermintaan, rng, platform, halal, ceo) {
+  var permintaan = Math.round(p.permintaanDasar * faktorHarga(p.hargaAcuan, hargaEfektif) * reputasi * musim * faktorPesaing * 1.0 * faktorTempat * kualitasStaf * efekPermintaan * (0.8 + rng() * 0.4));
+  if (platform) permintaan = Math.round(permintaan * 1.15);
+  if (halal) permintaan = Math.round(permintaan * 1.10);
+  if (ceo) permintaan = Math.round(permintaan * 1.05);
+  if (permintaan < 0) permintaan = 0;
+  return permintaan;
 }
 function jalankanHari(state, diskonPersen) {
   var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
@@ -528,10 +544,7 @@ function jalankanHari(state, diskonPersen) {
       t.karyawan.forEach(function (k) { totalSkill += k.skill; });
       kualitasStaf = 1 + 0.02 * (totalSkill / t.karyawan.length);
     }
-    var permintaan = Math.round(p.permintaanDasar * faktorHarga(p.hargaAcuan, hargaEfektif) * t.reputasi * musim * faktorPesaing * 1.0 * faktorTempat * kualitasStaf * efekPengali(t, 'permintaan', state.tanggal) * (0.8 + rng() * 0.4));
-    if (t.platform) permintaan = Math.round(permintaan * 1.15);
-    if (t.halal) permintaan = Math.round(permintaan * 1.10);
-    if (permintaan < 0) permintaan = 0;
+    var permintaan = hitungPermintaan(p, hargaEfektif, t.reputasi, musim, faktorPesaing, faktorTempat, kualitasStaf, efekPengali(t, 'permintaan', state.tanggal), rng, t.platform, t.halal, !!(state.eksekutif && state.eksekutif.ceo));
     var terjual = Math.min(permintaan, t.stok[pid]);
     var hasil = terjual * hargaEfektif;
     if (t.platform) hasil = Math.round(hasil * 0.85); // komisi platform
@@ -547,7 +560,7 @@ function jalankanHari(state, diskonPersen) {
     if (hangus > 0) pushLog(state, 'Slot jasa tak terjual hangus: ' + hangus + ' unit (kapasitas harian tidak bisa disimpan).');
   }
   state.kas += pendapatan;
-  state.omzetBulan += pendapatan;
+  t.omzetBulan = (t.omzetBulan || 0) + pendapatan;
   // Malam: kewajiban jatuh tempo -> denda & konsekuensi lapis 2.
   var jatuhTempo = [];
   t.kewajiban.forEach(function (k) {
@@ -563,14 +576,14 @@ function jalankanHari(state, diskonPersen) {
   });
   // Pajak bulanan: tiap ganti bulan, tagih 0,5% omzet bulan lalu.
   var bulanIni = state.tanggal.slice(0, 7);
-  if (state.bulanBerjalan && bulanIni !== state.bulanBerjalan) {
-    var pajak = Math.round(state.omzetBulan * PAJAK_PERSEN);
+  if (t.bulanBerjalan && bulanIni !== t.bulanBerjalan) {
+    var pajak = Math.round((t.omzetBulan || 0) * PAJAK_PERSEN);
     if (pajak > 0) {
       t.kewajiban.push({ id: 'pajak-' + state.tanggal, jenis: 'PPh final UMKM 0,5%', jumlah: pajak, jatuhTempo: addDays(state.tanggal, 15), dibayar: false, denda: 0 });
-      pushLog(state, 'Pajak bulan lalu: ' + fmtRp(pajak) + ' (0,5% dari omzet ' + fmtRp(state.omzetBulan) + ').');
+      pushLog(state, 'Pajak bulan lalu: ' + fmtRp(pajak) + ' (0,5% dari omzet ' + fmtRp(t.omzetBulan) + ').');
     }
-    state.omzetBulan = 0;
-    state.bulanBerjalan = bulanIni;
+    t.omzetBulan = 0;
+    t.bulanBerjalan = bulanIni;
     // Sewa bulan berikutnya.
     t.kewajiban.push({ id: 'sewa-' + state.tanggal, jenis: 'Sewa tempat', jumlah: t.sewaBulan, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0 });
   }
@@ -580,12 +593,13 @@ function jalankanHari(state, diskonPersen) {
   Object.keys(t.stok).forEach(function (pid) { nilaiAset += t.stok[pid] * PRODUK[pid].hargaAcuan; });
   if (!t.peralatanTerjual) nilaiAset += Math.round(PERALATAN[t.peralatan].biaya * 0.5);
   if (state.kas < 0 && tunggakanLama.length > 0 && nilaiAset <= 0) {
-    state.fase = 'bangkrut';
-    pushLog(state, 'VONIS BANGKRUT: kas negatif, tunggakan melewati tenggat, tidak ada aset bisa dijual, tidak ada pinjaman bisa diakses.');
+    // Vonis unit aktif: fase TIDAK langsung diset — pemanggil (holding) yang
+    // memutuskan tutup unit vs bangkrut holding.
+    pushLog(state, 'VONIS UNIT: kas negatif, tunggakan melewati tenggat, tidak ada aset bisa dijual, tidak ada pinjaman bisa diakses.');
     return { ok: true, laporan: laporan, pendapatan: pendapatan, bangkrut: true };
   }
-  // Menang: total aset >= Rp50 miliar.
-  var totalAset = state.kas + nilaiAset;
+  // Menang: total aset HOLDING >= Rp50 miliar.
+  var totalAset = totalAsetHolding(state);
   if (totalAset >= TARGET_MENANG) {
     state.fase = 'menang';
     pushLog(state, 'MENANG: total aset mencapai ' + fmtRp(totalAset) + '. Kamu konglomerat!');
@@ -738,13 +752,374 @@ function pilihEvent(state, idx) {
   return { ok: true, msg: 'Pilihan dicatat.' };
 }
 
+// ---------- TAHAP D: HOLDING ----------
+// Unit aktif tinggal di state (toko/siap/kas); sisanya di state.units.
+// Total aset holding = kas holding + kas & aset semua unit.
+function totalAsetUnit(unit) {
+  var raw = BIDANG_DATA[unit.bidang]; if (!raw) return 0;
+  var t = unit.toko; var nilai = 0;
+  Object.keys(t.stok || {}).forEach(function (pid) { if (raw.produk[pid]) nilai += (t.stok[pid] || 0) * raw.produk[pid].hargaAcuan; });
+  if (!t.peralatanTerjual && raw.peralatan[t.peralatan]) nilai += Math.round(raw.peralatan[t.peralatan].biaya * 0.5);
+  return nilai;
+}
+function totalAsetHolding(state) {
+  var total = state.holdingKas || 0;
+  if (state.toko) total += state.kas + totalAsetUnit({ bidang: state.bidang, toko: state.toko });
+  (state.units || []).forEach(function (u) { total += u.kas + totalAsetUnit(u); });
+  return total;
+}
+function kapasitasUnit(raw, t) {
+  var dasar = t.peralatanTerjual ? 10 : Math.min(raw.tempat[t.tempat].kapasitas, raw.peralatan[t.peralatan].kapasitas);
+  var bonus = 0;
+  (t.karyawan || []).forEach(function (k) { bonus += 5 + k.skill; });
+  return dasar + bonus;
+}
+function simpanUnitAktif(state) {
+  if (!state.toko) return;
+  var ex = null;
+  (state.units || []).forEach(function (u) { if (u.toko === state.toko) ex = u; });
+  if (ex) { ex.siap = state.siap; ex.kas = state.kas; }
+  else state.units.push({ bidang: state.bidang, toko: state.toko, siap: state.siap, kas: state.kas });
+}
+function muatUnitDariEntry(state, entry) {
+  simpanUnitAktif(state);
+  state.units = state.units.filter(function (u) { return u !== entry; });
+  state.toko = entry.toko; state.siap = entry.siap; state.kas = entry.kas; state.bidang = entry.bidang;
+  muatBidang(entry.bidang);
+  state.fase = 'toko';
+}
+function kembaliKeHolding(state) {
+  if (!state.toko && !(state.units || []).length) return { ok: false, msg: 'Belum ada unit.' };
+  state.fase = 'holding';
+  return { ok: true, msg: 'Ke layar holding.' };
+}
+function cariUnit(state, nama) {
+  if (state.toko && state.toko.nama === nama) return { aktif: true };
+  var ex = null;
+  (state.units || []).forEach(function (u) { if (u.toko.nama === nama) ex = u; });
+  return ex ? { aktif: false, entry: ex } : null;
+}
+function kasUnit(state, ref) { return ref.aktif ? state.kas : ref.entry.kas; }
+function setKasUnit(state, ref, nilai) { if (ref.aktif) state.kas = nilai; else ref.entry.kas = nilai; }
+function tarikDividen(state, nama, jumlah) {
+  var ref = cariUnit(state, nama);
+  if (!ref) return { ok: false, msg: 'Unit tidak ditemukan.' };
+  jumlah = Math.round(jumlah);
+  if (!jumlah || jumlah <= 0) return { ok: false, msg: 'Jumlah dividen harus > 0.' };
+  var kas = kasUnit(state, ref);
+  if (kas < jumlah) return { ok: false, msg: 'Kas unit tidak cukup (' + fmtRp(kas) + ').' };
+  setKasUnit(state, ref, kas - jumlah);
+  state.holdingKas += jumlah;
+  pushLog(state, 'Dividen ' + fmtRp(jumlah) + ' dari ' + nama + ' ke kas holding.');
+  return { ok: true, msg: 'Dividen ditarik.' };
+}
+function suntikModal(state, nama, jumlah) {
+  var ref = cariUnit(state, nama);
+  if (!ref) return { ok: false, msg: 'Unit tidak ditemukan.' };
+  jumlah = Math.round(jumlah);
+  if (!jumlah || jumlah <= 0) return { ok: false, msg: 'Jumlah suntikan harus > 0.' };
+  if (state.holdingKas < jumlah) return { ok: false, msg: 'Kas holding tidak cukup (' + fmtRp(state.holdingKas) + ').' };
+  state.holdingKas -= jumlah;
+  setKasUnit(state, ref, kasUnit(state, ref) + jumlah);
+  pushLog(state, 'Suntik modal ' + fmtRp(jumlah) + ' ke ' + nama + '.');
+  return { ok: true, msg: 'Modal disuntik.' };
+}
+function rekrutManajer(state) {
+  var t = state.toko; if (!t) return { ok: false, msg: 'Buka usaha dulu.' };
+  if (t.manajer) return { ok: false, msg: 'Unit ini sudah punya manajer.' };
+  var nama = 'Manajer ' + NAMA_KANDIDAT[Math.floor(Math.random() * NAMA_KANDIDAT.length)];
+  t.manajer = { nama: nama, gaji: 1500000 };
+  t.kewajiban.push({ id: 'manajer-' + state.hari, jenis: 'Gaji Manajer ' + nama, jumlah: 1500000, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0, manajerId: 'manajer' });
+  pushLog(state, 'Manajer direkrut: ' + nama + ' (' + fmtRp(1500000) + '/bulan). Ia menjaga unit saat kamu mengelola unit lain (autopilot).');
+  return { ok: true, msg: nama + ' direkrut.' };
+}
+function pecatManajer(state) {
+  var t = state.toko; if (!t || !t.manajer) return { ok: false, msg: 'Tidak ada manajer.' };
+  var nama = t.manajer.nama;
+  t.manajer = null;
+  pushLog(state, 'Manajer ' + nama + ' di-PHK. Unit kembali tanpa autopilot.');
+  return { ok: true, msg: nama + ' di-PHK.' };
+}
+function rekrutEksekutif(state, peran) {
+  if (!state.eksekutif) state.eksekutif = { ceo: null, direktur: null };
+  if (peran !== 'ceo' && peran !== 'direktur') return { ok: false, msg: 'Peran tidak dikenal.' };
+  if (state.eksekutif[peran]) return { ok: false, msg: 'Sudah ada ' + (peran === 'ceo' ? 'CEO' : 'Direktur') + '.' };
+  var gaji = peran === 'ceo' ? 5000000 : 8000000;
+  var label = peran === 'ceo' ? 'CEO' : 'Direktur';
+  state.eksekutif[peran] = { gaji: gaji };
+  if (!state.kewajibanHolding) state.kewajibanHolding = [];
+  state.kewajibanHolding.push({ id: 'eks-' + peran + '-' + state.hari, jenis: 'Gaji ' + label, jumlah: gaji, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0, eksekutifId: peran });
+  pushLog(state, label + ' direkrut (' + fmtRp(gaji) + '/bulan, dari kas holding). ' + (peran === 'ceo' ? 'Efek: permintaan semua unit +5%.' : 'Efek: biaya input semua unit -5%.'));
+  return { ok: true, msg: label + ' direkrut.' };
+}
+function pecatEksekutif(state, peran) {
+  if (!state.eksekutif || !state.eksekutif[peran]) return { ok: false, msg: 'Tidak ada ' + peran + '.' };
+  state.eksekutif[peran] = null;
+  pushLog(state, (peran === 'ceo' ? 'CEO' : 'Direktur') + ' dipecat. Efek holding-nya hilang.');
+  return { ok: true, msg: 'Eksekutif dipecat.' };
+}
+function bayarKewajibanHolding(state, id) {
+  var k = null;
+  (state.kewajibanHolding || []).forEach(function (x) { if (x.id === id) k = x; });
+  if (!k) return { ok: false, msg: 'Kewajiban tidak ditemukan.' };
+  if (k.dibayar) return { ok: false, msg: 'Sudah dibayar.' };
+  var total = k.jumlah + (k.denda || 0);
+  if (state.holdingKas < total) return { ok: false, msg: 'Kas holding tidak cukup (' + fmtRp(total) + ').' };
+  state.holdingKas -= total;
+  k.dibayar = true;
+  if (k.eksekutifId && state.eksekutif && state.eksekutif[k.eksekutifId]) {
+    var label = k.eksekutifId === 'ceo' ? 'CEO' : 'Direktur';
+    state.kewajibanHolding.push({ id: 'eks-' + k.eksekutifId + '-' + state.hari, jenis: 'Gaji ' + label, jumlah: k.jumlah, jatuhTempo: addDays(state.tanggal, 30), dibayar: false, denda: 0, eksekutifId: k.eksekutifId });
+  }
+  pushLog(state, 'Kewajiban holding dibayar: ' + k.jenis + ' ' + fmtRp(total) + '.');
+  return { ok: true, msg: 'Dibayar.' };
+}
+function bukaUnitBaruMulai(state, bidangId, modal) {
+  if (!BIDANG_DATA[bidangId]) return { ok: false, msg: 'Bidang tidak dikenal.' };
+  modal = Math.round(modal);
+  if (!modal || modal <= 0) return { ok: false, msg: 'Modal awal harus > 0.' };
+  if (state.holdingKas < modal) return { ok: false, msg: 'Kas holding tidak cukup (' + fmtRp(state.holdingKas) + '). Tarik dividen dulu dari unit yang jalan.' };
+  simpanUnitAktif(state);
+  state.holdingKas -= modal;
+  state.kas = modal;
+  state.toko = null;
+  state.siap = { tempat: null, lokasi: null, peralatan: null, izin: false, menu: [], supplier: {}, stokAwal: false, promo: false, platform: false, halal: false };
+  state.bidang = bidangId;
+  muatBidang(bidangId);
+  state.unitBaru = true;
+  state.fase = 'persiapan';
+  pushLog(state, 'Buka unit baru: ' + NAMA_BIDANG + ' dengan modal ' + fmtRp(modal) + ' dari kas holding.');
+  return { ok: true, msg: 'Persiapan unit baru dimulai.' };
+}
+function buatKandidatLatar(state, peranList) {
+  var rng = mulberry32(state.seed + state.hari * 101 + Math.floor(Math.random() * 100000));
+  var peran = peranList[Math.floor(rng() * peranList.length)];
+  var nama = NAMA_KANDIDAT[Math.floor(rng() * NAMA_KANDIDAT.length)];
+  var skill = 1 + Math.floor(rng() * 5);
+  return { id: 'k' + state.hari + '-' + Math.floor(rng() * 100000), nama: nama, peran: peran, skill: skill, gaji: gajiDariSkill(skill) };
+}
+// Hari unit latar: tanpa DOM, tanpa log detail, tanpa maju tanggal, tanpa event.
+// Manajer = autopilot (bayar kewajiban, beli bahan, produksi); tanpa manajer = jual stok saja.
+function hariLatarUnit(state, unit) {
+  var t = unit.toko, raw = BIDANG_DATA[unit.bidang], tanggal = state.tanggal;
+  var ringkas = { nama: t.nama, pendapatan: 0, terjual: 0, peringatan: [] };
+  t.pesanan = t.pesanan.filter(function (ps) {
+    if (ps.tiba <= tanggal) { t.bahan[ps.inputId] = (t.bahan[ps.inputId] || 0) + ps.qty; return false; }
+    return true;
+  });
+  t.efekAktif = (t.efekAktif || []).filter(function (e) { return tanggal <= e.sampai; });
+  if (state.hari - (t.kandidatRefreshHari || 0) >= 7) {
+    t.kandidat = [buatKandidatLatar(state, raw.peran), buatKandidatLatar(state, raw.peran), buatKandidatLatar(state, raw.peran)];
+    t.kandidatRefreshHari = state.hari;
+  }
+  if (t.pesananBesar && tanggal >= t.pesananBesar.deadline) {
+    var pb = t.pesananBesar; t.pesananBesar = null;
+    if ((t.stok[pb.produk] || 0) >= pb.qty) {
+      t.stok[pb.produk] -= pb.qty;
+      unit.kas += Math.round(pb.qty * t.harga[pb.produk] * pb.bonus);
+      t.reputasi = Math.min(1.5, t.reputasi + 0.05);
+    } else {
+      t.reputasi = Math.max(0.5, t.reputasi - 0.08);
+      ringkas.peringatan.push('pesanan besar gagal dipenuhi');
+    }
+  }
+  t.karyawan.slice().forEach(function (k) {
+    var tunggak = t.kewajiban.some(function (kw) { return !kw.dibayar && kw.gajiId === k.id && kw.jatuhTempo < tanggal; });
+    if (tunggak) {
+      k.moral -= 15;
+      if (k.moral <= 0) {
+        t.karyawan = t.karyawan.filter(function (x) { return x.id !== k.id; });
+        t.kapasitas = kapasitasUnit(raw, t);
+      }
+    }
+  });
+  if (t.manajer) {
+    t.kewajiban.forEach(function (kw) {
+      if (!kw.dibayar && kw.jatuhTempo <= tanggal) {
+        var total = kw.jumlah + (kw.denda || 0);
+        if (unit.kas >= total) {
+          unit.kas -= total; kw.dibayar = true;
+          if (kw.gajiId) {
+            var staf = null;
+            t.karyawan.forEach(function (x) { if (x.id === kw.gajiId) staf = x; });
+            if (staf) {
+              staf.moral = Math.min(100, staf.moral + 10);
+              t.kewajiban.push({ id: 'gaji-' + staf.id + '-' + state.hari, jenis: 'Gaji ' + staf.nama + ' (' + staf.peran + ')', jumlah: staf.gaji, jatuhTempo: addDays(tanggal, 30), dibayar: false, denda: 0, gajiId: staf.id });
+            }
+          }
+          if (kw.manajerId && t.manajer) {
+            t.kewajiban.push({ id: 'manajer-' + state.hari, jenis: 'Gaji Manajer ' + t.manajer.nama, jumlah: t.manajer.gaji, jatuhTempo: addDays(tanggal, 30), dibayar: false, denda: 0, manajerId: 'manajer' });
+          }
+        }
+      }
+    });
+    var kapTarget = Math.round(t.kapasitas * efekPengali(t, 'kapasitas', tanggal));
+    unit.siap.menu.forEach(function (pid) {
+      var prod = raw.produk[pid];
+      prod.bahan.forEach(function (b) {
+        var butuh = kapTarget - (t.bahan[b.id] || 0);
+        if (butuh > 0) {
+          var arkeId = unit.siap.supplier[b.id];
+          if (arkeId) {
+            var arke = SUPPLIER_ARKE.filter(function (a) { return a.id === arkeId; })[0];
+            var lvl = t.hubungan[supplierKey(b.id, arkeId)] || 0;
+            var harga = Math.round(b.harga * arke.pengaliHarga * (1 - lvl * 0.01) * (state.eksekutif && state.eksekutif.direktur ? 0.95 : 1));
+            var biaya = harga * butuh;
+            var rngB = mulberry32(state.seed + state.hari * 31 + b.id.length);
+            var telat = rngB() > arke.andal ? 1 : 0;
+            var tiba = addDays(tanggal, arke.kirimHari + telat);
+            if (unit.kas >= biaya) {
+              unit.kas -= biaya;
+              t.pesanan.push({ inputId: b.id, qty: butuh, tiba: tiba, lunas: true });
+            } else if (unit.kas >= 0 && arke.tempoHari + lvl > 0) {
+              var tempo = arke.tempoHari + lvl;
+              t.pesanan.push({ inputId: b.id, qty: butuh, tiba: tiba, lunas: false });
+              t.kewajiban.push({ id: 'sup-' + state.hari + '-' + b.id, jenis: 'Tempo supplier ' + b.nama, jumlah: biaya, jatuhTempo: addDays(tanggal, tempo), dibayar: false, denda: 0, supplierKey: supplierKey(b.id, arkeId) });
+            }
+          }
+        }
+      });
+    });
+    var sisaKap = kapTarget - (t.produksiHariIni || 0);
+    unit.siap.menu.forEach(function (pid) {
+      if (sisaKap <= 0) return;
+      var prod = raw.produk[pid];
+      var maxBahan = Infinity;
+      prod.bahan.forEach(function (b) { maxBahan = Math.min(maxBahan, t.bahan[b.id] || 0); });
+      var qty = Math.min(sisaKap, maxBahan);
+      if (qty > 0) {
+        prod.bahan.forEach(function (b) { t.bahan[b.id] -= qty; });
+        t.stok[pid] = (t.stok[pid] || 0) + qty;
+        t.produksiHariIni = (t.produksiHariIni || 0) + qty;
+        sisaKap -= qty;
+      }
+    });
+  }
+  var rng = mulberry32(state.seed + hashBidang(unit.bidang) + state.hari * 7919);
+  var musim = raw.musim ? (raw.musim[monthOf(tanggal)] || 1.0) : 1.0;
+  var faktorPesaing = Math.max(0.5, 1 - 0.03 * raw.pesaing);
+  var faktorTempat = LOKASI[t.lokasi].faktorTempat;
+  var kualitasStaf = 1;
+  if (t.karyawan.length) {
+    var totalSkill = 0;
+    t.karyawan.forEach(function (k) { totalSkill += k.skill; });
+    kualitasStaf = 1 + 0.02 * (totalSkill / t.karyawan.length);
+  }
+  unit.siap.menu.forEach(function (pid) {
+    var p = raw.produk[pid];
+    var hargaEfektif = Math.round(t.harga[pid] * efekPengali(t, 'harga', tanggal));
+    var permintaan = hitungPermintaan(p, hargaEfektif, t.reputasi, musim, faktorPesaing, faktorTempat, kualitasStaf, efekPengali(t, 'permintaan', tanggal), rng, t.platform, t.halal, !!(state.eksekutif && state.eksekutif.ceo));
+    var terjual = Math.min(permintaan, t.stok[pid] || 0);
+    var hasil = terjual * hargaEfektif;
+    if (t.platform) hasil = Math.round(hasil * 0.85);
+    t.stok[pid] = (t.stok[pid] || 0) - terjual;
+    ringkas.pendapatan += hasil;
+    ringkas.terjual += terjual;
+    if (terjual > 0) t.reputasi = Math.min(1.5, t.reputasi + 0.005);
+  });
+  if (raw.jenis === 'jasa') {
+    unit.siap.menu.forEach(function (pid) { t.stok[pid] = 0; });
+  }
+  unit.kas += ringkas.pendapatan;
+  t.omzetBulan = (t.omzetBulan || 0) + ringkas.pendapatan;
+  t.kewajiban.forEach(function (k) {
+    if (!k.dibayar && k.jatuhTempo <= tanggal) {
+      k.denda = Math.round(k.jumlah * DENDA_TELAT_PERSEN);
+      if (k.supplierKey) {
+        t.hubungan[k.supplierKey] = 0;
+        t.reputasi = Math.max(0.5, t.reputasi - 0.05);
+      }
+    }
+  });
+  var bulanIni = tanggal.slice(0, 7);
+  if (t.bulanBerjalan && bulanIni !== t.bulanBerjalan) {
+    var pajak = Math.round((t.omzetBulan || 0) * PAJAK_PERSEN);
+    if (pajak > 0) {
+      t.kewajiban.push({ id: 'pajak-' + tanggal, jenis: 'PPh final UMKM 0,5%', jumlah: pajak, jatuhTempo: addDays(tanggal, 15), dibayar: false, denda: 0 });
+    }
+    t.omzetBulan = 0;
+    t.bulanBerjalan = bulanIni;
+    t.kewajiban.push({ id: 'sewa-' + tanggal, jenis: 'Sewa tempat', jumlah: t.sewaBulan, jatuhTempo: addDays(tanggal, 30), dibayar: false, denda: 0 });
+  }
+  t.produksiHariIni = 0;
+  if (unit.kas < 0) ringkas.peringatan.push('kas negatif');
+  var menunggak = t.kewajiban.filter(function (k) { return !k.dibayar && k.jatuhTempo <= tanggal; }).length;
+  if (menunggak) ringkas.peringatan.push(menunggak + ' kewajiban menunggak');
+  return ringkas;
+}
+function cekTutupUnit(unit, tanggal) {
+  var t = unit.toko;
+  if (unit.kas >= 0) return false;
+  var lama = t.kewajiban.some(function (k) { return !k.dibayar && addDays(k.jatuhTempo, 30) < tanggal; });
+  if (!lama) return false;
+  return totalAsetUnit(unit) <= 0;
+}
+function jalankanHariHolding(state, diskonPersen) {
+  if (!state.toko) return { ok: false, msg: 'Tidak ada unit aktif. Buka unit dari Holding.' };
+  var latar = [];
+  state.units.slice().forEach(function (u) {
+    latar.push(hariLatarUnit(state, u));
+  });
+  var tutup = [];
+  state.units.slice().forEach(function (u) {
+    if (cekTutupUnit(u, state.tanggal)) tutup.push(u);
+  });
+  tutup.forEach(function (u) {
+    var hasil = Math.round(totalAsetUnit(u) * 0.5);
+    state.holdingKas += hasil;
+    state.units = state.units.filter(function (x) { return x !== u; });
+    pushLog(state, 'UNIT TUTUP: ' + u.toko.nama + ' bangkrut dan dilikuidasi (dijual rugi ' + fmtRp(hasil) + ' ke kas holding). Holding selamat.');
+  });
+  (state.kewajibanHolding || []).forEach(function (k) {
+    if (!k.dibayar && k.jatuhTempo <= state.tanggal) {
+      k.denda = Math.round(k.jumlah * DENDA_TELAT_PERSEN);
+      if (addDays(k.jatuhTempo, 30) < state.tanggal && k.eksekutifId && state.eksekutif && state.eksekutif[k.eksekutifId]) {
+        var label = k.eksekutifId === 'ceo' ? 'CEO' : 'Direktur';
+        state.eksekutif[k.eksekutifId] = null;
+        pushLog(state, label + ' KELUAR karena gaji menunggak > 30 hari.');
+      }
+    }
+  });
+  var r = jalankanHari(state, diskonPersen);
+  if (!r.ok) return r;
+  if (r.bangkrut) {
+    var hasilAktif = Math.round(totalAsetUnit({ bidang: state.bidang, toko: state.toko }) * 0.5);
+    state.holdingKas += hasilAktif;
+    var namaTutup = state.toko.nama;
+    state.toko = null;
+    // Hari sudah berjalan (penjualan dkk. terjadi); majukan tanggal supaya tidak terulang.
+    state.tanggal = addDays(state.tanggal, 1);
+    state.hari += 1;
+    if (state.units.length > 0) {
+      muatUnitDariEntry(state, state.units[0]);
+      pushLog(state, 'UNIT TUTUP: ' + namaTutup + ' bangkrut dan dilikuidasi. Holding selamat, kelola beralih ke ' + state.toko.nama + '.');
+    } else if (state.holdingKas > 0) {
+      state.fase = 'holding';
+      pushLog(state, 'UNIT TUTUP: ' + namaTutup + ' bangkrut dan dilikuidasi. Tidak ada unit tersisa, tapi kas holding ' + fmtRp(state.holdingKas) + ' masih ada — buka unit baru.');
+    } else {
+      state.fase = 'bangkrut';
+      pushLog(state, 'BANGKRUT: unit terakhir tutup dan kas holding habis. Tidak ada jalan keluar.');
+    }
+    return { ok: true, laporan: r.laporan, pendapatan: r.pendapatan, latar: latar, unitTutup: namaTutup };
+  }
+  if (r.menang) return { ok: true, laporan: r.laporan, pendapatan: r.pendapatan, latar: latar, menang: true };
+  var tunggakHolding = (state.kewajibanHolding || []).some(function (k) { return !k.dibayar && addDays(k.jatuhTempo, 30) < state.tanggal; });
+  var adaUnitBerKas = state.units.some(function (u) { return u.kas > 0; }) || (state.toko && state.kas > 0);
+  if (state.holdingKas < 0 && tunggakHolding && !adaUnitBerKas) {
+    state.fase = 'bangkrut';
+    pushLog(state, 'BANGKRUT HOLDING: kas holding negatif, tunggakan holding melewati tenggat, tidak ada unit bisa dividen.');
+    return { ok: true, laporan: r.laporan, pendapatan: r.pendapatan, latar: latar, bangkrut: true };
+  }
+  return { ok: true, laporan: r.laporan, pendapatan: r.pendapatan, latar: latar, jatuhTempo: r.jatuhTempo };
+}
+
 // ---- UI (browser saja; logika di atas bisa dites dari Node) ----
 if (typeof document !== 'undefined') {
   var state = null;
   function muat() {
     try {
       var raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; if (!state.bidang) state.bidang = 'kuliner'; if (state.riset && typeof state.riset.lapis1 !== 'undefined') { state.riset = { kuliner: state.riset }; } if (!state.riset) state.riset = {}; muatBidang(state.bidang); return; } }
+      if (raw) { var p = JSON.parse(raw); if (p && p.fase) { state = p; if (!state.bidang) state.bidang = 'kuliner'; if (state.riset && typeof state.riset.lapis1 !== 'undefined') { state.riset = { kuliner: state.riset }; } if (!state.riset) state.riset = {}; if (!state.units) state.units = []; if (state.holdingKas === undefined) state.holdingKas = 0; if (!state.eksekutif) state.eksekutif = { ceo: null, direktur: null }; if (!state.kewajibanHolding) state.kewajibanHolding = []; if (state.unitCounter === undefined) state.unitCounter = state.toko ? 2 : 1; if (state.unitBaru === undefined) state.unitBaru = false; muatBidang(state.bidang); if (state.toko) { if (!state.toko.nama) state.toko.nama = 'Unit 1 — ' + NAMA_BIDANG; if (state.toko.omzetBulan === undefined) { state.toko.omzetBulan = 0; state.toko.bulanBerjalan = state.tanggal.slice(0, 7); } } state.units.forEach(function (u) { if (u.toko && u.toko.omzetBulan === undefined) { u.toko.omzetBulan = 0; u.toko.bulanBerjalan = state.tanggal.slice(0, 7); } }); return; } }
     } catch (e) { /* abaikan */ }
     state = createState();
   }
@@ -873,6 +1248,11 @@ if (typeof document !== 'undefined') {
     el('staf-list').querySelectorAll('button[data-pecat]').forEach(function (btn) {
       btn.addEventListener('click', function () { aksi(function () { return pecat(state, btn.getAttribute('data-pecat')); }); });
     });
+    // Manajer unit (autopilot latar).
+    if (t.manajer) el('manajer-area').innerHTML = '<div>' + t.manajer.nama + ' — gaji ' + fmtRp(t.manajer.gaji) + '/bulan, autopilot aktif (menjaga unit saat kamu mengelola unit lain) <button class="btn" id="btn-pecat-manajer">PHK Manajer</button></div>';
+    else el('manajer-area').innerHTML = '<div>Belum ada manajer (tanpa manajer, unit ini hanya menjual stok saat berjalan latar). <button class="btn" id="btn-rekrut-manajer">Rekrut Manajer (' + fmtRp(1500000) + '/bulan)</button></div>';
+    var bm = el('btn-rekrut-manajer'); if (bm) bm.addEventListener('click', function () { aksi(function () { return rekrutManajer(state); }); });
+    var pm = el('btn-pecat-manajer'); if (pm) pm.addEventListener('click', function () { aksi(function () { return pecatManajer(state); }); });
     if (t.pesananBesar) el('pesanan-besar-info').textContent = 'Pesanan besar: ' + t.pesananBesar.qty + ' ' + PRODUK[t.pesananBesar.produk].nama + ' sebelum ' + t.pesananBesar.deadline + ' (bonus 20%). Stok saat ini: ' + (t.stok[t.pesananBesar.produk] || 0) + '.';
     else el('pesanan-besar-info').textContent = '';
     // Beli: input + supplier.
@@ -904,17 +1284,75 @@ if (typeof document !== 'undefined') {
       btn.addEventListener('click', function () { aksi(function () { return bayarKewajiban(state, btn.getAttribute('data-bayar')); }); });
     });
   }
+  function runwayUnit(t, kas) {
+    var tetap = Math.round(t.sewaBulan / 30);
+    if (tetap <= 0) return '∞';
+    return Math.max(0, Math.floor(kas / tetap)) + ' hari';
+  }
+  function renderHolding() {
+    var total = totalAsetHolding(state);
+    var nUnit = (state.units || []).length + (state.toko ? 1 : 0);
+    el('holding-info').textContent = 'Kas holding: ' + fmtRp(state.holdingKas) + ' | Total aset holding: ' + fmtRp(total) + ' / ' + fmtRp(TARGET_MENANG) + ' (' + (total / TARGET_MENANG * 100).toFixed(4) + '%) | Unit: ' + nUnit;
+    var rows = [];
+    function barisUnit(nama, kas, t, aktif) {
+      var menunggak = t.kewajiban.filter(function (k) { return !k.dibayar && k.jatuhTempo <= state.tanggal; }).length;
+      var peringatan = [];
+      if (kas < 0) peringatan.push('KAS NEGATIF');
+      if (menunggak) peringatan.push(menunggak + ' menunggak');
+      if (!t.manajer) peringatan.push('tanpa manajer (latar: jual stok saja)');
+      return '<div><strong>' + nama + '</strong> — kas ' + fmtRp(kas) + ', runway ' + runwayUnit(t, kas) + (peringatan.length ? ' — <span style="color:#DC2626">' + peringatan.join(', ') + '</span>' : '') + ' ' + (aktif ? '(aktif)' : '<button class="btn" data-kelola="' + nama + '">Kelola</button>') + ' <label>Dividen <input type="number" id="div-' + nama + '" value="100000" min="1"> <button class="btn" data-div="' + nama + '">Tarik</button></label> <label>Suntik <input type="number" id="sun-' + nama + '" value="100000" min="1"> <button class="btn" data-sun="' + nama + '">Suntik</button></label></div>';
+    }
+    if (state.toko) rows.push(barisUnit(state.toko.nama, state.kas, state.toko, true));
+    (state.units || []).forEach(function (u) { rows.push(barisUnit(u.toko.nama, u.kas, u.toko, false)); });
+    if (!rows.length) rows.push('<p>Belum ada unit. Buka unit baru di bawah (butuh kas holding — tarik dividen dulu bila unit sudah jalan, atau mulai dari riset bila ini awal permainan).</p>');
+    el('holding-unit-list').innerHTML = rows.join('');
+    el('holding-unit-list').querySelectorAll('button[data-kelola]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var entry = null;
+        state.units.forEach(function (u) { if (u.toko.nama === btn.getAttribute('data-kelola')) entry = u; });
+        if (entry) { muatUnitDariEntry(state, entry); simpan(); render(); }
+      });
+    });
+    el('holding-unit-list').querySelectorAll('button[data-div]').forEach(function (btn) {
+      btn.addEventListener('click', function () { var nama = btn.getAttribute('data-div'); aksi(function () { return tarikDividen(state, nama, parseInt(el('div-' + nama).value, 10) || 0); }); });
+    });
+    el('holding-unit-list').querySelectorAll('button[data-sun]').forEach(function (btn) {
+      btn.addEventListener('click', function () { var nama = btn.getAttribute('data-sun'); aksi(function () { return suntikModal(state, nama, parseInt(el('sun-' + nama).value, 10) || 0); }); });
+    });
+    var eks = '';
+    eks += '<div>CEO ' + (state.eksekutif && state.eksekutif.ceo ? '(aktif, ' + fmtRp(state.eksekutif.ceo.gaji) + '/bulan, permintaan +5%) <button class="btn" data-pecat-eks="ceo">Pecat</button>' : '(belum ada, ' + fmtRp(5000000) + '/bulan, permintaan +5%) <button class="btn" data-rekrut-eks="ceo">Rekrut</button>') + '</div>';
+    eks += '<div>Direktur ' + (state.eksekutif && state.eksekutif.direktur ? '(aktif, ' + fmtRp(state.eksekutif.direktur.gaji) + '/bulan, biaya input -5%) <button class="btn" data-pecat-eks="direktur">Pecat</button>' : '(belum ada, ' + fmtRp(8000000) + '/bulan, biaya input -5%) <button class="btn" data-rekrut-eks="direktur">Rekrut</button>') + '</div>';
+    el('holding-eksekutif').innerHTML = eks;
+    el('holding-eksekutif').querySelectorAll('button[data-rekrut-eks]').forEach(function (btn) {
+      btn.addEventListener('click', function () { aksi(function () { return rekrutEksekutif(state, btn.getAttribute('data-rekrut-eks')); }); });
+    });
+    el('holding-eksekutif').querySelectorAll('button[data-pecat-eks]').forEach(function (btn) {
+      btn.addEventListener('click', function () { aksi(function () { return pecatEksekutif(state, btn.getAttribute('data-pecat-eks')); }); });
+    });
+    el('holding-bidang-baru').innerHTML = Object.keys(BIDANG_DATA).map(function (id) { return '<option value="' + id + '">' + BIDANG_DATA[id].nama + '</option>'; }).join('');
+    var kw = (state.kewajibanHolding || []).filter(function (k) { return !k.dibayar; });
+    if (!kw.length) el('holding-kewajiban-list').innerHTML = '<p>Tidak ada kewajiban holding.</p>';
+    else el('holding-kewajiban-list').innerHTML = kw.map(function (k) {
+      var telat = k.jatuhTempo < state.tanggal;
+      return '<div>' + k.jenis + ' — ' + fmtRp(k.jumlah + (k.denda || 0)) + ' (jatuh tempo ' + k.jatuhTempo + (telat ? ', MENUNGGAK' : '') + ') <button class="btn" data-bayar-holding="' + k.id + '">Bayar</button></div>';
+    }).join('');
+    el('holding-kewajiban-list').querySelectorAll('button[data-bayar-holding]').forEach(function (btn) {
+      btn.addEventListener('click', function () { aksi(function () { return bayarKewajibanHolding(state, btn.getAttribute('data-bayar-holding')); }); });
+    });
+  }
   function render() {
     renderHeader();
     var risetTampil = state.fase === 'pilihBidang' || state.fase === 'riset' || state.fase === 'persiapan';
     el('layar-riset').style.display = risetTampil ? 'block' : 'none';
     el('layar-persiapan').style.display = state.fase === 'persiapan' ? 'block' : 'none';
     el('layar-toko').style.display = state.fase === 'toko' ? 'block' : 'none';
+    el('layar-holding').style.display = state.fase === 'holding' ? 'block' : 'none';
     el('layar-akhir').style.display = (state.fase === 'bangkrut' || state.fase === 'menang') ? 'block' : 'none';
     el('persiapan-judul').textContent = '2. Persiapan Buka Usaha — ' + NAMA_BIDANG;
     el('toko-judul').textContent = '3. Usaha Berjalan — ' + NAMA_BIDANG;
     if (risetTampil) renderRiset();
     if (state.fase === 'persiapan') renderPersiapan();
+    if (state.fase === 'holding') renderHolding();
     if (state.fase === 'toko') renderToko();
     if (state.fase === 'bangkrut') { el('akhir-judul').textContent = 'BANGKRUT'; el('akhir-isi').textContent = 'Usaha tutup. Kas ' + fmtRp(state.kas) + '. Lihat log untuk urutan kesalahanmu, lalu coba lagi dengan keputusan berbeda.'; }
     if (state.fase === 'menang') { el('akhir-judul').textContent = 'MENANG — KONGLOMERAT!'; el('akhir-isi').textContent = 'Total aset mencapai ' + fmtRp(TARGET_MENANG) + '. Dari modal ' + fmtRp(MODAL_AWAL) + ' menjadi konglomerat!'; }
@@ -945,13 +1383,29 @@ if (typeof document !== 'undefined') {
     });
     el('btn-hari').addEventListener('click', function () {
       aksi(function () {
-        var r = jalankanHari(state, parseInt(el('promo-diskon').value, 10) || 0);
+        var r = jalankanHariHolding(state, parseInt(el('promo-diskon').value, 10) || 0);
         if (r.ok) {
           var lap = r.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
-          el('laporan-hari-ini').textContent = 'Kemarin: ' + lap + ' | Total pendapatan: ' + fmtRp(r.pendapatan);
+          var latarTxt = (r.latar || []).map(function (x) { return x.nama + ': ' + fmtRp(x.pendapatan) + (x.peringatan.length ? ' (' + x.peringatan.join(', ') + ')' : ''); }).join(' | ');
+          el('laporan-hari-ini').textContent = 'Kemarin: ' + lap + ' | Total pendapatan: ' + fmtRp(r.pendapatan) + (latarTxt ? ' | Latar: ' + latarTxt : '') + (r.unitTutup ? ' | UNIT TUTUP: ' + r.unitTutup : '');
         }
         return r;
       });
+    });
+    el('btn-ke-holding').addEventListener('click', function () { aksi(function () { return kembaliKeHolding(state); }); });
+    el('btn-hari-holding').addEventListener('click', function () {
+      aksi(function () {
+        var r = jalankanHariHolding(state, 0);
+        if (r.ok) {
+          var lap = r.laporan.map(function (x) { return x.produk + ': minta ' + x.permintaan + ', laku ' + x.terjual + ', ' + fmtRp(x.pendapatan); }).join(' | ');
+          var latarTxt = (r.latar || []).map(function (x) { return x.nama + ': ' + fmtRp(x.pendapatan) + (x.peringatan.length ? ' (' + x.peringatan.join(', ') + ')' : ''); }).join(' | ');
+          el('holding-laporan').textContent = 'Unit aktif: ' + lap + ' | Total: ' + fmtRp(r.pendapatan) + (latarTxt ? ' | Latar: ' + latarTxt : '') + (r.unitTutup ? ' | UNIT TUTUP: ' + r.unitTutup : '');
+        }
+        return r;
+      });
+    });
+    el('btn-buka-unit-baru').addEventListener('click', function () {
+      aksi(function () { return bukaUnitBaruMulai(state, el('holding-bidang-baru').value, parseInt(el('holding-modal-baru').value, 10) || 0); });
     });
     el('btn-pinj-normal').addEventListener('click', function () { aksi(function () { return ambilPinjaman(state, 'normal'); }); });
     el('btn-pinj-darurat').addEventListener('click', function () { aksi(function () { return ambilPinjaman(state, 'darurat'); }); });
@@ -964,5 +1418,5 @@ if (typeof document !== 'undefined') {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { createState: createState, risetLapis1: risetLapis1, risetLapis2: risetLapis2, risetLapis3: risetLapis3, pilihBidang: pilihBidang, muatBidang: muatBidang, normalisasiBidang: normalisasiBidang, sinyalBidang: sinyalBidang, modalKasarBidang: modalKasarBidang, teksLapis1: teksLapis1, teksLapis2: teksLapis2, persiapanBeli: persiapanBeli, persiapanWajibLengkap: persiapanWajibLengkap, bukaUsaha: bukaUsaha, ambilPinjaman: ambilPinjaman, jualPeralatan: jualPeralatan, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, bayarKewajiban: bayarKewajiban, jalankanHari: jalankanHari, runwayHari: runwayHari, rekrut: rekrut, pecat: pecat, pilihEvent: pilihEvent, gulirEvent: gulirEvent, refreshKandidat: refreshKandidat, hitungKapasitas: hitungKapasitas, efekPengali: efekPengali, buatEvent: buatEvent, BIDANG: BIDANG_DATA, PRODUK: PRODUK, TEMPAT: TEMPAT, LOKASI: LOKASI, PERALATAN: PERALATAN, SUPPLIER_ARKE: SUPPLIER_ARKE, fmtRp: fmtRp };
+  module.exports = { createState: createState, risetLapis1: risetLapis1, risetLapis2: risetLapis2, risetLapis3: risetLapis3, pilihBidang: pilihBidang, muatBidang: muatBidang, normalisasiBidang: normalisasiBidang, sinyalBidang: sinyalBidang, modalKasarBidang: modalKasarBidang, teksLapis1: teksLapis1, teksLapis2: teksLapis2, persiapanBeli: persiapanBeli, persiapanWajibLengkap: persiapanWajibLengkap, bukaUsaha: bukaUsaha, ambilPinjaman: ambilPinjaman, jualPeralatan: jualPeralatan, beliBahan: beliBahan, produksi: produksi, aturHarga: aturHarga, bayarKewajiban: bayarKewajiban, jalankanHari: jalankanHari, runwayHari: runwayHari, rekrut: rekrut, pecat: pecat, pilihEvent: pilihEvent, gulirEvent: gulirEvent, refreshKandidat: refreshKandidat, hitungKapasitas: hitungKapasitas, efekPengali: efekPengali, buatEvent: buatEvent, totalAsetUnit: totalAsetUnit, totalAsetHolding: totalAsetHolding, simpanUnitAktif: simpanUnitAktif, muatUnitDariEntry: muatUnitDariEntry, kembaliKeHolding: kembaliKeHolding, tarikDividen: tarikDividen, suntikModal: suntikModal, rekrutManajer: rekrutManajer, pecatManajer: pecatManajer, rekrutEksekutif: rekrutEksekutif, pecatEksekutif: pecatEksekutif, bayarKewajibanHolding: bayarKewajibanHolding, bukaUnitBaruMulai: bukaUnitBaruMulai, hariLatarUnit: hariLatarUnit, cekTutupUnit: cekTutupUnit, jalankanHariHolding: jalankanHariHolding, hitungPermintaan: hitungPermintaan, BIDANG: BIDANG_DATA, PRODUK: PRODUK, TEMPAT: TEMPAT, LOKASI: LOKASI, PERALATAN: PERALATAN, SUPPLIER_ARKE: SUPPLIER_ARKE, fmtRp: fmtRp };
 }
